@@ -376,7 +376,7 @@ eof\n
     def _getMovieFn(self, movie):
         movieFn = movie.getFileName()
         if movieFn.endswith("tiff"):
-            return pwutils.replaceExt(movieFn, "tif2")
+            return pwutils.replaceExt(movieFn, "tif")
         else:
             return movieFn
 
