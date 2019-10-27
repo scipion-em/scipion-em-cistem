@@ -1,7 +1,12 @@
 # **************************************************************************
 # *
-# * Authors:     Roberto Marabini (roberto@cnb.csic.es)
-# *              Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca)
+# * Authors:     Roberto Marabini (roberto@cnb.csic.es) [1]
+# *              Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca) [2]
+# *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [3]
+# *
+# * [1] Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [2] Department of Anatomy and Cell Biology, McGill University
+# * [3] MRC Laboratory of Molecular Biology, MRC-LMB
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -57,7 +62,7 @@ class ProtUnblur(ProtAlignMovies):
     def _getConvertExtension(self, filename):
         """ Check whether it is needed to convert to .mrc or not """
         ext = pwutils.getExt(filename).lower()
-        return None if ext in ['.mrc', '.mrcs'] else 'mrc'
+        return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif'] else 'mrc'
 
 
     def _defineAlignmentParams(self, form):
@@ -195,6 +200,7 @@ class ProtUnblur(ProtAlignMovies):
         movieFolder = self._getOutputMovieFolder(movie)
         movieBaseName = pwutils.removeExt(movie.getFileName())
         aveMicFn = movieBaseName + '_uncorrected_avg.mrc'
+        self._createLink(movie)
         self._argsUnblur(movie)
         
         try:
@@ -241,7 +247,7 @@ class ProtUnblur(ProtAlignMovies):
                 _extraWork()
 
         except:
-            print("ERROR: Movie %s failed\n" % movie.getName())
+            print("ERROR: Failed to align movie %s\n" % movie.getFileName())
 
     def _insertFinalSteps(self, deps):
         stepId = self._insertFunctionStep('waitForThreadStep',
@@ -297,7 +303,7 @@ class ProtUnblur(ProtAlignMovies):
         else:
             preExp, dose = 0.0, 0.0
 
-        args = {'movieName': movie.getBaseName(),
+        args = {'movieName': pwutils.basename(self._getMovieFn(movie)),
                 'micFnName': self._getMicFn(movie),
                 'shiftsFn': self._getMovieLogFile(movie),
                 'samplingRate': self.samplingRate,
@@ -366,6 +372,18 @@ eof\n
 """
 
         self._args = argsStr % args
+
+    def _getMovieFn(self, movie):
+        movieFn = movie.getFileName()
+        if movieFn.endswith("tiff"):
+            return pwutils.replaceExt(movieFn, "tif2")
+        else:
+            return movieFn
+
+    def _createLink(self, movie):
+        movieFn = movie.getFileName()
+        if movieFn.endswith("tiff"):
+            pwutils.createLink(movieFn, self._getMovieFn(movie))
 
     def _getRelPath(self, baseName, refPath):
         return os.path.relpath(self._getExtraPath(baseName), refPath)
