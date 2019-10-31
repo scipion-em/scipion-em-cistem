@@ -261,15 +261,18 @@ class ProtFindParticles(ProtParticlePickingAuto):
             argsStr = self._getArgsStr()
             cmdArgs = argsStr % args
 
-            self.runJob(self._getProgram(), cmdArgs, env=Plugin.getEnviron())
+            try:
+                self.runJob(self._getProgram(), cmdArgs, env=Plugin.getEnviron())
 
-            # Move output from micPath (tmp) to extra
-            pltFn = pwutils.replaceExt(self._getStackFn(mic), 'plt')
-            pwutils.moveFile(pltFn, self._getPltFn(mic))
+                # Move output from micPath (tmp) to extra
+                pltFn = pwutils.replaceExt(self._getStackFn(mic), 'plt')
+                pwutils.moveFile(pltFn, self._getPltFn(mic))
 
-            # Clean tmp folder
-            pwutils.cleanPath(outMic)
-            pwutils.cleanPath(self._getLogFn(mic))
+                # Clean tmp folder
+                pwutils.cleanPath(outMic)
+                pwutils.cleanPath(self._getLogFn(mic))
+            except:
+                print("Picking for mic %s failed! Skipping.." % micName)
 
     def createOutputStep(self):
         micSet = self.getInputMicrographs()
@@ -333,7 +336,7 @@ class ProtFindParticles(ProtParticlePickingAuto):
                          'radius': self.radius.get(),
                          'maxradius': self.maxradius.get(),
                          'highRes': self.highRes.get(),
-                         'boxSize': 0,
+                         'boxSize': 120,
                          'minDist': self.minDist.get(),
                          'threshold': self.threshold.get(),
                          'avoidHighVar': 'YES' if self.avoidHighVar else 'NO',
@@ -370,15 +373,16 @@ NO
 %(avoidLocMean)s
 %(algorithm)d
 %(bgBoxes)d
-%(ptclWhite)s"""
-        else:
+%(ptclWhite)s
+eof"""
+        else: # ref-based picking
             argsStr += """
 YES
 %(refsFn)s
 %(useRadAvg)s"""
 
-        if self.useRadAvg:
-            argsStr += """
+            if self.useRadAvg:
+                argsStr += """
 %(maxradius)f
 %(highRes)f
 %(outStack)s
@@ -389,10 +393,11 @@ YES
 %(avoidLocMean)s
 %(algorithm)d
 %(bgBoxes)d
-%(ptclWhite)s"""
-        else:
-            if self.rotateRef > 0:
-                argsStr += """
+%(ptclWhite)s
+eof"""
+            else:
+                if self.rotateRef > 0:
+                    argsStr += """
 YES
 %(rotateRef)d
 %(maxradius)f
@@ -405,9 +410,10 @@ YES
 %(avoidLocMean)s
 %(algorithm)d
 %(bgBoxes)d
-%(ptclWhite)s"""
-            else:
-                argsStr += """
+%(ptclWhite)s
+eof"""
+                else:
+                    argsStr += """
 NO
 %(maxradius)f
 %(highRes)f
@@ -419,7 +425,8 @@ NO
 %(avoidLocMean)s
 %(algorithm)d
 %(bgBoxes)d
-%(ptclWhite)s"""
+%(ptclWhite)s
+eof"""
 
         return argsStr
 

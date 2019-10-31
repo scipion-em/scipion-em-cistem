@@ -141,11 +141,15 @@ def readCoordinates(mic, fn, coordsSet):
         with open(fn, 'r') as f:
             for line in f:
                 values = line.strip().split()
-                x_ang, y_ang = float(values[0]), float(values[1])
+                x, y = float(values[0]), float(values[1])
                 #FIXME coords should be in Angstroms...
                 #x = int(x_ang / mic.getSamplingRate())
                 #y = int(y_ang / mic.getSamplingRate())
-                x, y = x_ang, y_ang
+
+                #my_x = (-1.0) * (y - 1.0 - mic.getXDim())
+                #my_y = (x - 1.0)
+
+                #x, y = mic.getXDim() - x_ang, y_ang
                 coord = Coordinate()
                 coord.setPosition(x, y)
                 coord.setMicrograph(mic)
