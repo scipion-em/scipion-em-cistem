@@ -29,12 +29,11 @@ import os
 import pyworkflow.em
 import pyworkflow.utils as pwutils
 
-from .constants import CISTEM_HOME, V1_0_0
+from .constants import *
 
 
 _logo = "cistem_logo.png"
 _references = ['Grant2018']
-
 
 
 class Plugin(pyworkflow.em.Plugin):

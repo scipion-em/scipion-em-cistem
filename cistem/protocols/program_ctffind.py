@@ -63,9 +63,9 @@ class ProgramCtffind:
                        allowsNull=True)
 
         form.addParam('inputType', params.EnumParam, default=1,
-                       label='Estimate using:',
-                       choices=['Movies', 'Micrographs'],
-                       display=params.EnumParam.DISPLAY_HLIST)
+                      label='Estimate using:',
+                      choices=['Movies', 'Micrographs'],
+                      display=params.EnumParam.DISPLAY_HLIST)
         form.addParam('inputMicrographs', params.PointerParam, important=True,
                       condition='not recalculate and inputType==1',
                       label='Input micrographs',
@@ -114,13 +114,13 @@ class ProgramCtffind:
                        help='Step size for the defocus search.')
 
         group.addParam('slowSearch', params.BooleanParam, default=False,
-                      expertLevel=params.LEVEL_ADVANCED,
-                      label="Slower, more exhaustive search?",
-                      help="Select this option if CTF determination "
-                           "fails on images that show clear Thon rings "
-                           "and should therefore yield good CTF parameters, "
-                           "or if you expect noticably elliptical Thon "
-                           "rings and high noise.")
+                       expertLevel=params.LEVEL_ADVANCED,
+                       label="Slower, more exhaustive search?",
+                       help="Select this option if CTF determination "
+                            "fails on images that show clear Thon rings "
+                            "and should therefore yield good CTF parameters, "
+                            "or if you expect noticably elliptical Thon "
+                            "rings and high noise.")
 
         group.addParam('fixAstig', params.BooleanParam, default=False,
                        label='Restrain astigmatism?',
@@ -132,15 +132,15 @@ class ProgramCtffind:
                             'fits. Disable this option if you expect '
                             'large astigmatism.')
         group.addParam('astigmatism', params.FloatParam,
-                      default=500.0, condition='fixAstig',
-                      label='Tolerated astigmatism (A)',
-                      expertLevel=params.LEVEL_ADVANCED,
-                      help='When restraining astigmatism, astigmatism values '
-                           'much larger than this will be penalized. '
-                           'Set to negative to remove this restraint. '
-                           'In cases where the amplitude spectrum is '
-                           'very noisy, such a restraint can help '
-                           'achieve more accurate results.')
+                       default=500.0, condition='fixAstig',
+                       label='Tolerated astigmatism (A)',
+                       expertLevel=params.LEVEL_ADVANCED,
+                       help='When restraining astigmatism, astigmatism values '
+                            'much larger than this will be penalized. '
+                            'Set to negative to remove this restraint. '
+                            'In cases where the amplitude spectrum is '
+                            'very noisy, such a restraint can help '
+                            'achieve more accurate results.')
 
         form.addSection(label='Phase shift')
         form.addParam('findPhaseShift', params.BooleanParam,
@@ -151,23 +151,23 @@ class ProgramCtffind:
                            'determined together with the defocus '
                            'parameters?')
         form.addParam('minPhaseShift', params.FloatParam, default=0.,
-                       label="Minimum phase shift (deg)",
-                       condition='findPhaseShift',
-                       help='If finding an additional phase shift, '
-                            'this value sets the lower bound for the '
-                            'search.')
+                      label="Minimum phase shift (deg)",
+                      condition='findPhaseShift',
+                      help='If finding an additional phase shift, '
+                           'this value sets the lower bound for the '
+                           'search.')
         form.addParam('maxPhaseShift', params.FloatParam, default=180,
-                       label="Maximum phase shift (deg)",
-                       condition='findPhaseShift',
-                       help='If finding an additional phase shift, '
-                            'this value sets the upper bound for the '
-                            'search.')
+                      label="Maximum phase shift (deg)",
+                      condition='findPhaseShift',
+                      help='If finding an additional phase shift, '
+                           'this value sets the upper bound for the '
+                           'search.')
         form.addParam('stepPhaseShift', params.FloatParam, default=10,
-                       label="Phase shift search step (deg)",
-                       condition='findPhaseShift',
-                       help='If finding an additional phase shift, '
-                            'this value sets the step size for the '
-                            'search.')
+                      label="Phase shift search step (deg)",
+                      condition='findPhaseShift',
+                      help='If finding an additional phase shift, '
+                           'this value sets the step size for the '
+                           'search.')
 
         form.addParallelSection(threads=2, mpi=1)
 

@@ -33,7 +33,6 @@ from pyworkflow.gui.project import ProjectWindow
 from cistem.protocols import ProtCTFFind, ProtUnblur
 
 
-
 def createCtfPlot(ctfSet, ctfId):
     ctfModel = ctfSet[ctfId]
     psdFn = ctfModel.getPsdFile()

@@ -34,3 +34,7 @@ V1_0_0 = '1.0.0'
 
 CTFFIND4_BIN = 'ctffind'
 UNBLUR_BIN = 'unblur'
+FIND_PARTICLES_BIN = 'find_particles'
+
+LOW_VARIANCE = 0
+VARIANCE_NEAR_MODE = 1

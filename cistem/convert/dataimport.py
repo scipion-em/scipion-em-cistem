@@ -49,7 +49,7 @@ class GrigorieffLabImportCTF():
             psdPrefixes = [fnBase,
                            fnBase.replace('_ctffind4', '')]
             for prefix in psdPrefixes:
-                psdFile =  prefix + suffix
+                psdFile = prefix + suffix
                 if os.path.exists(psdFile):
                     if psdFile.endswith('.ctf'):
                         psdFile += ':mrc'

@@ -28,6 +28,9 @@ import os
 import numpy as np
 from itertools import izip
 
+from pyworkflow.em.data import Coordinate, SetOfClasses2D, SetOfAverages
+from pyworkflow.em import ImageHandler
+from pyworkflow.utils.path import replaceBaseExt, join, exists
 
 
 def rowToCtfModel(ctfRow, ctfModel):
@@ -124,3 +127,51 @@ def writeShiftsMovieAlignment(movie, shiftsFn, s0, sN):
               + initShifts + shiftsY + " " + finalShifts)
     f.write(shifts)
     f.close()
+
+
+def readSetOfCoordinates(workDir, micSet, coordSet):
+    """ Read from cisTEM .plt files. """
+    for mic in micSet:
+        micCoordFn = join(workDir, replaceBaseExt(mic.getFileName(), 'plt'))
+        readCoordinates(mic, micCoordFn, coordSet)
+
+
+def readCoordinates(mic, fn, coordsSet):
+    if exists(fn):
+        with open(fn, 'r') as f:
+            for line in f:
+                values = line.strip().split()
+                x_ang, y_ang = float(values[0]), float(values[1])
+                #FIXME coords should be in Angstroms...
+                #x = int(x_ang / mic.getSamplingRate())
+                #y = int(y_ang / mic.getSamplingRate())
+                x, y = x_ang, y_ang
+                coord = Coordinate()
+                coord.setPosition(x, y)
+                coord.setMicrograph(mic)
+                coordsSet.append(coord)
+        f.close()
+
+
+def writeReferences(inputSet, outputFn):
+    """
+    Write references star and stack files from SetOfAverages or SetOfClasses2D.
+    Params:
+        inputSet: the input SetOfParticles to be converted
+        outputFn: where to write the output files.
+    """
+    ih = ImageHandler()
+
+    def _convert(item, i):
+        index = i + 1
+        ih.convert(item, (index, outputFn))
+        item.setLocation(index, outputFn)
+
+    if isinstance(inputSet, SetOfAverages):
+        for i, img in enumerate(inputSet):
+            _convert(img, i)
+    elif isinstance(inputSet, SetOfClasses2D):
+        for i, rep in enumerate(inputSet.iterRepresentatives()):
+            _convert(rep, i)
+    else:
+        raise Exception('Invalid object type: %s' % type(inputSet))

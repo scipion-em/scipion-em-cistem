@@ -64,7 +64,6 @@ class ProtUnblur(ProtAlignMovies):
         ext = pwutils.getExt(filename).lower()
         return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif'] else 'mrc'
 
-
     def _defineAlignmentParams(self, form):
         form.addHidden('doSaveAveMic', params.BooleanParam,
                        default=True)
@@ -171,13 +170,13 @@ class ProtUnblur(ProtAlignMovies):
 
         group = form.addGroup('Filter')
         group.addParam('bfactor', params.FloatParam,
-                      default=1500.,
-                      label='B-factor (A^2)',
-                      help='This B-Factor is applied to the reference sum '
-                           'prior to alignment. It is intended to low-pass '
-                           'filter the images in order to prevent '
-                           'alignment to spurious noise peaks and '
-                           'detector artifacts.')
+                       default=1500.,
+                       label='B-factor (A^2)',
+                       help='This B-Factor is applied to the reference sum '
+                            'prior to alignment. It is intended to low-pass '
+                            'filter the images in order to prevent '
+                            'alignment to spurious noise peaks and '
+                            'detector artifacts.')
 
         line = group.addLine('Mask central cross?',
                              help='If selected, the Fourier transform of '
@@ -404,8 +403,7 @@ eof\n
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.txt')
 
     def _getMovieShifts(self, movie):
-        """ Returns the x and y shifts for the alignment of this movie.
-        """
+        """ Returns the x and y shifts for the alignment of this movie. """
         pixSize = movie.getSamplingRate()
         shiftFn = self._getShiftsFn(movie)
         xShifts, yShifts = readShiftsMovieAlignment(shiftFn)

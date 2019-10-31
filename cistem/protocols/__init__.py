@@ -26,3 +26,4 @@
 
 from protocol_ctffind import ProtCTFFind
 from protocol_unblur import ProtUnblur
+from protocol_picking import ProtFindParticles

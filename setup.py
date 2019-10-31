@@ -57,7 +57,7 @@ setup(
     # There are some restrictions on what makes a valid project name
     # specification here:
     # https://packaging.python.org/specifications/core-metadata/#name
-    name='scipion-em-eman2',  # Required
+    name='scipion-em-cistem',  # Required
 
     # Versions should comply with PEP 440:
     # https://www.python.org/dev/peps/pep-0440/
@@ -65,12 +65,12 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='1.0.5',  # Required
+    version='1.0.0',  # Required
 
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
-    description='Plugin to use EMAN2 programs within the Scipion framework',  # Required
+    description='Plugin to use cisTEM programs within the Scipion framework',  # Required
 
     # This is an optional longer description of your project that represents
     # the body of text which users will see when they visit PyPI.
@@ -86,7 +86,7 @@ setup(
     #
     # This field corresponds to the "Home-Page" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#home-page-optional
-    url='https://github.com/scipion-em/scipion-em-eman2',  # Optional
+    url='https://github.com/scipion-em/scipion-em-cistem',  # Optional
 
     # This should be your name or the name of the organization which owns the
     # project.
@@ -163,7 +163,7 @@ setup(
     # MANIFEST.in as well.
     # include_package_data=True,
     package_data={  # Optional
-       'eman2': ['eman2_logo.png', 'protocols.conf'],
+       'cistem': ['cistem_logo.png', 'protocols.conf'],
     },
 
     # Although 'package_data' is the preferred approach, in some case you may
@@ -196,7 +196,7 @@ setup(
     # maintainers, and where to support the project financially. The key is
     # what's used to render the link text on PyPI.
     project_urls={  # Optional
-        'Bug Reports': 'https://github.com/scipion-em/scipion-em-eman2/issues',
-        'Source': 'https://github.com/scipion-em/scipion-em-eman2/',
+        'Bug Reports': 'https://github.com/scipion-em/scipion-em-cistem/issues',
+        'Source': 'https://github.com/scipion-em/scipion-em-cistem/',
     },
 )
