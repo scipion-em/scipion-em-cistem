@@ -88,4 +88,17 @@ doi = "http://dx.doi.org/10.1016/j.jsb.2015.08.008",
 url = "http://www.sciencedirect.com/science/article/pii/S1047847715300460",
 }
 
+@Article{Sigworth2004,
+title = "Classical detection theory and the cryo-EM particle selection problem",
+journal = "Journal of Structural Biology",
+volume = "145",
+number = "1",
+pages = "111 - 122",
+year = "2004",
+issn = "1047-8477",
+doi = "http://doi.org/10.1016/j.jsb.2003.10.025",
+url = "http://www.sciencedirect.com/science/article/pii/S1047847703002405",
+author = "Fred J. Sigworth",
+}
+
 """

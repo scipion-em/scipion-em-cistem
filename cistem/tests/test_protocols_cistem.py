@@ -28,7 +28,7 @@ from pyworkflow.em import *
 from pyworkflow.tests import *
 
 from cistem import *
-from cistem.protocols import ProtCTFFind
+from cistem.protocols import ProtCTFFind, ProtFindParticles
 
 
 class TestBase(BaseTest):
@@ -66,6 +66,18 @@ class TestBase(BaseTest):
                                        voltage=300,
                                        sphericalAberration=2)
 
+    @classmethod
+    def runCtffind(cls, inputMics):
+        """ Run CTFFind protocol. """
+        cls.protCTF = ProtCTFFind()
+        cls.protCTF.inputMicrographs.set(inputMics)
+        cls.launchProtocol(cls.protCTF)
+
+        if cls.protCTF.outputCTF is None:
+            raise Exception("SetOfCTF has not been produced.")
+
+        return cls.protCTF
+
 
 class TestCtffind4(TestBase):
     @classmethod
@@ -85,3 +97,20 @@ class TestCtffind4(TestBase):
             self.assertAlmostEquals(ctfModel.getDefocusU(),values[0], delta=1000)
             self.assertAlmostEquals(ctfModel.getDefocusV(),values[1], delta=1000)
             self.assertAlmostEquals(ctfModel.getDefocusAngle(),values[2], delta=10)
+
+
+class TestFindParticles(TestBase):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestBase.setData()
+        cls.protImport = cls.runImportMicrographBPV(cls.micFn)
+        cls.protCtfRun = cls.runCtffind(cls.protImport.outputMicrographs)
+
+    def testFindParts1(self):
+        protPick = ProtFindParticles()
+        protPick.inputMicrographs.set(self.protImport.outputMicrographs)
+        protPick.ctfRelations.set(self.protCtfRun.outputCTF)
+
+        self.proj.launchProtocol(protPick, wait=True)
+        self.assertIsNotNone(protPick.outputCoordinates, "SetOfCoordinates has not been produced.")
