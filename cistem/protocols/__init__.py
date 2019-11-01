@@ -24,6 +24,7 @@
 # *
 # **************************************************************************
 
-from protocol_ctffind import ProtCTFFind
-from protocol_unblur import ProtUnblur
-from protocol_picking import ProtFindParticles
+from protocol_ctffind import CistemProtCTFFind
+from protocol_unblur import CistemProtUnblur
+from protocol_picking import CistemProtFindParticles
+from protocol_refine2d import CistemProtRefine2D

@@ -43,9 +43,10 @@ To check the installation, simply run one of the following Scipion tests:
 
 .. code-block::
 
+   scipion test cistem.tests.test_protocols_cistem_movies.TestUnblur
    scipion test cistem.tests.test_protocols_cistem.TestCtffind4
    scipion test cistem.tests.test_protocols_cistem.TestFindParticles
-   scipion test cistem.tests.test_protocols_cistem_movies.TestUnblur
+   scipion test cistem.tests.test_protocols_cistem.TestRefine2D
 
 A complete list of tests can also be seen by executing ``scipion test --show --grep cistem``
 
@@ -61,6 +62,7 @@ Protocols
 * ctffind4
 * unblur
 * find particles
+* classify 2D
 
 References
 ----------

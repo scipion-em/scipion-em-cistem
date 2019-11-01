@@ -6,7 +6,7 @@
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
-# * the Free Software Foundation; either version 2 of the License, or
+# * the Free Software Foundation; either version 3 of the License, or
 # * (at your option) any later version.
 # *
 # * This program is distributed in the hope that it will be useful,
@@ -39,7 +39,7 @@ from cistem.convert import readSetOfCoordinates, writeReferences
 from cistem.constants import *
 
 
-class ProtFindParticles(ProtParticlePickingAuto):
+class CistemProtFindParticles(ProtParticlePickingAuto):
     """ Protocol to pick particles in a set of micrographs using cisTEM. """
     _label = 'find particles'
 
@@ -220,7 +220,8 @@ class ProtFindParticles(ProtParticlePickingAuto):
         for mic in self.getInputMicrographs():
             micName = mic.getFileName()
             # We convert the input micrographs if they are not .mrc
-            outMic = os.path.join(self._getTmpPath(), pwutils.replaceBaseExt(micName, 'mrc'))
+            outMic = os.path.join(self._getTmpPath(),
+                                  pwutils.replaceBaseExt(micName, 'mrc'))
             if micName.endswith('.mrc'):
                 pwutils.createLink(micName, outMic)
             else:
@@ -239,7 +240,8 @@ class ProtFindParticles(ProtParticlePickingAuto):
     def _pickMicrographStep(self, mics, args):
         for mic in mics:
             micName = mic.getFileName()
-            outMic = os.path.join(self._getTmpPath(), pwutils.replaceBaseExt(micName, 'mrc'))
+            outMic = os.path.join(self._getTmpPath(),
+                                  pwutils.replaceBaseExt(micName, 'mrc'))
             ctf = self.ctfDict[mic.getMicName()]
 
             args.update({'micName': outMic,
@@ -277,7 +279,8 @@ class ProtFindParticles(ProtParticlePickingAuto):
     def createOutputStep(self):
         micSet = self.getInputMicrographs()
         coordSet = self._createSetOfCoordinates(micSet)
-        self.readCoordsFromMics(self._getExtraPath(), micSet, coordSet)
+        self.readCoordsFromMics(self._getExtraPath(), micSet,
+                                coordSet)
 
         self._defineOutputs(outputCoordinates=coordSet)
         self._defineSourceRelation(self.inputMicrographs, coordSet)
@@ -434,7 +437,7 @@ eof"""
         if coordSet.getBoxSize() is None:
             coordSet.setBoxSize(self._getBoxSize())
 
-        readSetOfCoordinates(self._getExtraPath(), micList, coordSet)
+        readSetOfCoordinates(self._getExtraPath(), micList, coordSet, self.highRes.get())
 
     def _getBoxSize(self):
         return 128

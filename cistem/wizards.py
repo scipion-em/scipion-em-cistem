@@ -26,11 +26,11 @@
 
 from pyworkflow.em.wizard import *
 
-from cistem.protocols import ProtCTFFind
+from cistem.protocols import CistemProtCTFFind
 
 
 class BrandeisCTFWizard(CtfWizard):
-    _targets = [(ProtCTFFind, ['lowRes', 'highRes'])]
+    _targets = [(CistemProtCTFFind, ['lowRes', 'highRes'])]
     
     def _getParameters(self, protocol):
         

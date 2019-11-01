@@ -36,7 +36,7 @@ from cistem.constants import *
 from .program_ctffind import ProgramCtffind
 
 
-class ProtCTFFind(pw.em.ProtCTFMicrographs):
+class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
     """
     Estimates CTF for a set of micrographs/movies with ctffind4.
     

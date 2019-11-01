@@ -7,7 +7,7 @@
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
-# * the Free Software Foundation; either version 2 of the License, or
+# * the Free Software Foundation; either version 3 of the License, or
 # * (at your option) any later version.
 # *
 # * This program is distributed in the hope that it will be useful,
@@ -29,7 +29,7 @@ from pyworkflow.em import *
 from pyworkflow.tests import *
 
 from cistem import *
-from cistem.protocols import ProtUnblur
+from cistem.protocols import CistemProtUnblur
 
 
 
@@ -73,7 +73,7 @@ class TestUnblur(TestMoviesBase):
         self.assertIsNotNone(outputMovies)
 
         inputMovies = protImport.outputMovies
-        prot = self.newProtocol(ProtUnblur,
+        prot = self.newProtocol(CistemProtUnblur,
                                 alignFrame0=2,
                                 alignFrameN=6)
         prot.inputMovies.set(inputMovies)

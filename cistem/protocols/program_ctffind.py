@@ -58,7 +58,7 @@ class ProgramCtffind:
                       label="Do recalculate ctf?")
         form.addParam('continueRun', params.PointerParam, allowsNull=True,
                       condition='recalculate', label="Input previous run",
-                      pointerClass='ProtCTFFind')
+                      pointerClass='CistemProtCTFFind')
         form.addHidden('sqliteFile', params.FileParam, condition='recalculate',
                        allowsNull=True)
 

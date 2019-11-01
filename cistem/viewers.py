@@ -30,7 +30,7 @@ from pyworkflow.em.viewers import CtfView, EmPlotter, MicrographsView
 import pyworkflow.em.viewers.showj as showj
 from pyworkflow.gui.project import ProjectWindow
 
-from cistem.protocols import ProtCTFFind, ProtUnblur
+from cistem.protocols import CistemProtCTFFind, CistemProtUnblur
 
 
 def createCtfPlot(ctfSet, ctfId):
@@ -64,7 +64,7 @@ ProjectWindow.registerObjectCommand(OBJCMD_CTFFIND4, createCtfPlot)
 class CtffindViewer(Viewer):
     """ Specific way to visualize SetOfCtf. """
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    _targets = [ProtCTFFind]
+    _targets = [CistemProtCTFFind]
 
     def _visualize(self, prot, **kwargs):
         outputCTF = getattr(prot, 'outputCTF', None)
@@ -99,7 +99,7 @@ def _getValues(fn, row):
 
 
 class ProtUnblurViewer(Viewer):
-    _targets = [ProtUnblur]
+    _targets = [CistemProtUnblur]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
 
     _label = 'viewer unblur'

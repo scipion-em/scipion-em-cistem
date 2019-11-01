@@ -28,7 +28,7 @@ from pyworkflow.em import *
 from pyworkflow.tests import *
 
 from cistem import *
-from cistem.protocols import ProtCTFFind, ProtFindParticles
+from cistem.protocols import CistemProtCTFFind, CistemProtFindParticles
 
 
 class TestBase(BaseTest):
@@ -69,7 +69,7 @@ class TestBase(BaseTest):
     @classmethod
     def runCtffind(cls, inputMics):
         """ Run CTFFind protocol. """
-        cls.protCTF = ProtCTFFind()
+        cls.protCTF = CistemProtCTFFind()
         cls.protCTF.inputMicrographs.set(inputMics)
         cls.launchProtocol(cls.protCTF)
 
@@ -87,7 +87,7 @@ class TestCtffind4(TestBase):
         cls.protImport = cls.runImportMicrographBPV(cls.micFn)
     
     def testCtffind4V1(self):
-        protCTF = ProtCTFFind()
+        protCTF = CistemProtCTFFind()
         protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protCTF, wait=True)
         self.assertIsNotNone(protCTF.outputCTF, "SetOfCTF has not been produced.")
@@ -108,7 +108,7 @@ class TestFindParticles(TestBase):
         cls.protCtfRun = cls.runCtffind(cls.protImport.outputMicrographs)
 
     def testFindParts1(self):
-        protPick = ProtFindParticles()
+        protPick = CistemProtFindParticles()
         protPick.inputMicrographs.set(self.protImport.outputMicrographs)
         protPick.ctfRelations.set(self.protCtfRun.outputCTF)
 
