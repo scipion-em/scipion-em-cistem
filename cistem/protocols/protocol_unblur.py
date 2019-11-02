@@ -50,7 +50,7 @@ from cistem.constants import UNBLUR_BIN
 
 class CistemProtUnblur(ProtAlignMovies):
     """ This protocol wraps unblur movie alignment program.
-    More information at https://cistem.org/documentation#tab-1-6
+    More information at https://cistem.org/documentation
     """
     _label = 'unblur'
     CONVERT_TO_MRC = 'mrc'

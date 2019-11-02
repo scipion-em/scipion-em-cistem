@@ -264,7 +264,8 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             cmdArgs = argsStr % args
 
             try:
-                self.runJob(self._getProgram(), cmdArgs, env=Plugin.getEnviron())
+                self.runJob(self._getProgram(), cmdArgs,
+                            env=Plugin.getEnviron())
 
                 # Move output from micPath (tmp) to extra
                 pltFn = pwutils.replaceExt(self._getStackFn(mic), 'plt')
@@ -437,7 +438,7 @@ eof"""
         if coordSet.getBoxSize() is None:
             coordSet.setBoxSize(self._getBoxSize())
 
-        readSetOfCoordinates(self._getExtraPath(), micList, coordSet, self.highRes.get())
+        readSetOfCoordinates(self._getExtraPath(), micList, coordSet)
 
     def _getBoxSize(self):
         return 128
@@ -451,14 +452,16 @@ eof"""
 
     def _getLogFn(self, mic):
         micName = mic.getFileName()
-        return pwutils.join(self._getTmpPath(), pwutils.replaceBaseExt(micName, 'log'))
+        return pwutils.join(self._getTmpPath(),
+                            pwutils.replaceBaseExt(micName, 'log'))
 
     def _getStackFn(self, mic):
         return self._getTmpPath('mic_%06d.mrc' % mic.getObjId())
 
     def _getPltFn(self, mic):
         micName = mic.getFileName()
-        return pwutils.join(self._getExtraPath(), pwutils.replaceBaseExt(micName, 'plt'))
+        return pwutils.join(self._getExtraPath(),
+                            pwutils.replaceBaseExt(micName, 'plt'))
 
     def getInputReferences(self):
         return self.inputRefs.get() if self.inputRefs else None

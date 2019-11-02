@@ -129,23 +129,20 @@ def writeShiftsMovieAlignment(movie, shiftsFn, s0, sN):
     f.close()
 
 
-def readSetOfCoordinates(workDir, micSet, coordSet, highRes):
+def readSetOfCoordinates(workDir, micSet, coordSet):
     """ Read from cisTEM .plt files. """
     for mic in micSet:
         micCoordFn = join(workDir, replaceBaseExt(mic.getFileName(), 'plt'))
-        readCoordinates(mic, micCoordFn, coordSet, highRes)
+        readCoordinates(mic, micCoordFn, coordSet)
 
 
-def readCoordinates(mic, fn, coordsSet, highRes):
+def readCoordinates(mic, fn, coordsSet):
     if exists(fn):
         with open(fn, 'r') as f:
             for line in f:
                 values = line.strip().split()
-                x_ang, y_ang = float(values[0]), float(values[1])
-                newPix, _ = _findNewPixelSize(mic.getXDim(), mic.getYDim(),
-                                              mic.getSamplingRate(), highRes)
-                x = int((x_ang - 1) * mic.getSamplingRate() / newPix)
-                y = int((y_ang - 1) * mic.getSamplingRate() / newPix)
+                x = float(values[1])
+                y = float(mic.getYDim() - float(values[0]))
                 coord = Coordinate()
                 coord.setPosition(x, y)
                 coord.setMicrograph(mic)
@@ -175,58 +172,3 @@ def writeReferences(inputSet, outputFn):
             _convert(rep, i)
     else:
         raise Exception('Invalid object type: %s' % type(inputSet))
-
-
-def _findNewPixelSize(micX, micY, orig_pixel_size, high_res):
-    """ Reimplemented from core/functions.cpp of cisTEM. """
-    # First we look for a nice factorizable micrograph dimension
-    # which gives approximately the desired pixel size
-    if micX == micY:
-        wanted_int = int(micX * orig_pixel_size / high_res * 2.0)
-        newMicX = _returnClosestFactorizedUpper(wanted_int, 5, True)
-        newMicY = newMicX
-    elif micX > micY:
-        wanted_int = int(micY * orig_pixel_size / high_res * 2.0)
-        newMicY = _returnClosestFactorizedUpper(wanted_int, 5, True)
-        newMicX = _myroundint(float(newMicY) / float(micY) * float(micX))
-    else:
-        wanted_int = int(micX * orig_pixel_size / high_res * 2.0)
-        newMicX = _returnClosestFactorizedUpper(wanted_int, 5, True)
-        newMicY = _myroundint(float(newMicX) / float(micX) * float(micY))
-
-    # calculate new pixel size
-    new_pixX = orig_pixel_size * float(micX) / float(newMicX)
-    new_pixY = orig_pixel_size * float(micY) / float(newMicY)
-
-    return new_pixX, new_pixY
-
-
-def _myroundint(a):
-    """ Reimplemented from core/functions.h of cisTEM. """
-    return int(a + 0.5) if a > 0 else int(a - 0.5)
-
-
-def _returnClosestFactorizedUpper(wanted_int, largest_factor, enforce_even=False):
-    """ Reimplemented from core/functions.cpp of cisTEM. """
-    number = 0
-    remainder = wanted_int
-    if enforce_even:
-        temp_int = wanted_int
-        if (temp_int % 2) != 0:
-            temp_int += 1
-        for number in range(temp_int, 10000 * wanted_int, 2):
-            remainder = number
-            for factor in range(2, largest_factor+1, 1):
-                if remainder == 1:
-                    break
-                else:
-                    temp_int = remainder % factor
-                    while temp_int == 0:
-                        remainder /= factor
-                        temp_int = remainder % factor
-            if remainder == 1:
-                break
-    else:
-        raise Exception('Not implemented!')
-
-    return number
