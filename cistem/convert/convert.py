@@ -29,8 +29,14 @@ import numpy as np
 from itertools import izip
 
 from pyworkflow.em.data import Coordinate, SetOfClasses2D, SetOfAverages
-from pyworkflow.em import ImageHandler
+from pyworkflow.em import ImageHandler, Transform
+import pyworkflow.em.convert.transformations as transformations
 from pyworkflow.utils.path import replaceBaseExt, join, exists
+
+
+HEADER_COLUMNS = ['INDEX', 'PSI', 'THETA', 'PHI', 'SHX', 'SHY', 'MAG',
+                  'FILM', 'DF1', 'DF2', 'ANGAST', 'PSHIFT', 'OCC',
+                  'LogP', 'SIGMA', 'SCORE', 'CHANGE']
 
 
 def rowToCtfModel(ctfRow, ctfModel):
@@ -50,7 +56,7 @@ def parseCtffind4Output(filename):
         for line in f:
             if not line.startswith("#"):
                 result = tuple(map(float, line.split()[1:]))
-                # Stop reading. In ctffind4-4.0.15 output file has additional lines.
+                # Stop reading. In ctffind4-4.0.15 there are extra lines
                 break
         f.close()
     return result
@@ -117,7 +123,7 @@ def writeShiftsMovieAlignment(movie, shiftsFn, s0, sN):
     shiftsX = ""
     shiftsY = ""
     for shiftX, shiftY in izip(shiftListX, shiftListY):
-        if alFrame >= s0 and alFrame <= sN:
+        if s0 <= alFrame <= sN:
             shiftsX = shiftsX + "%0.4f " % shiftX
             shiftsY = shiftsY + "%0.4f " % shiftY
         alFrame += 1
@@ -141,6 +147,7 @@ def readCoordinates(mic, fn, coordsSet):
         with open(fn, 'r') as f:
             for line in f:
                 values = line.strip().split()
+                # plt coords are in Imagic style
                 x = float(values[1])
                 y = float(mic.getYDim() - float(values[0]))
                 coord = Coordinate()
@@ -172,3 +179,53 @@ def writeReferences(inputSet, outputFn):
             _convert(rep, i)
     else:
         raise Exception('Invalid object type: %s' % type(inputSet))
+
+
+def rowToAlignment(alignmentRow, samplingRate):
+    """
+    Return an Transform object representing the Alignment
+    from a given parFile row.
+    """
+    angles = np.zeros(3)
+    shifts = np.zeros(3)
+    alignment = Transform()
+    # PSI   THETA     PHI       SHX       SHY
+    angles[0] = float(alignmentRow.get('PSI'))
+    angles[1] = float(alignmentRow.get('THETA'))
+    angles[2] = float(alignmentRow.get('PHI'))
+    shifts[0] = float(alignmentRow.get('SHX'))/samplingRate
+    shifts[1] = float(alignmentRow.get('SHY'))/samplingRate
+
+    M = matrixFromGeometry(shifts, angles)
+    alignment.setMatrix(M)
+
+    return alignment
+
+
+def matrixFromGeometry(shifts, angles):
+    """ Create the transformation matrix from a given
+    2D shifts in X and Y...and the 3 euler angles.
+    """
+    inverseTransform = True
+    radAngles = -np.deg2rad(angles)
+
+    M = transformations.euler_matrix(
+        radAngles[0], radAngles[1], radAngles[2], 'szyz')
+    if inverseTransform:
+        M[:3, 3] = -shifts[:3]
+        M = np.linalg.inv(M)
+    else:
+        M[:3, 3] = shifts[:3]
+
+    return M
+
+
+def geometryFromMatrix(matrix, inverseTransform=True):
+    if inverseTransform:
+        matrix = np.linalg.inv(matrix)
+        shifts = -transformations.translation_from_matrix(matrix)
+    else:
+        shifts = transformations.translation_from_matrix(matrix)
+    angles = -np.rad2deg(transformations.euler_from_matrix(matrix, axes='szyz'))
+
+    return shifts, angles

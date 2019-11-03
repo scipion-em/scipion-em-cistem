@@ -1,8 +1,10 @@
 # **************************************************************************
 # *
-# * Authors:    Laura del Cano (ldelcano@cnb.csic.es)
+# * Authors:    Laura del Cano (ldelcano@cnb.csic.es) [1]
+# * Authors:    Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [2]
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [2] MRC Laboratory of Molecular Biology (MRC-LMB)
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -107,10 +109,11 @@ class TestFindParticles(TestBase):
         cls.protImport = cls.runImportMicrographBPV(cls.micFn)
         cls.protCtfRun = cls.runCtffind(cls.protImport.outputMicrographs)
 
-    def testFindParts1(self):
+    def testFindParts(self):
         protPick = CistemProtFindParticles()
         protPick.inputMicrographs.set(self.protImport.outputMicrographs)
         protPick.ctfRelations.set(self.protCtfRun.outputCTF)
 
         self.proj.launchProtocol(protPick, wait=True)
-        self.assertIsNotNone(protPick.outputCoordinates, "SetOfCoordinates has not been produced.")
+        self.assertIsNotNone(protPick.outputCoordinates,
+                             "SetOfCoordinates has not been produced.")

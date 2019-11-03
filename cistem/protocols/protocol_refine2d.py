@@ -26,17 +26,21 @@
 # *
 # **************************************************************************
 
-import os
 import re
+from glob import glob
+from collections import OrderedDict
 
 import pyworkflow.em as em
-from pyworkflow.protocol.params import (PointerParam, FloatParam, IntParam,
-                                        EnumParam, StringParam,
-                                        BooleanParam, LabelParam)
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.utils.path import makePath, cleanPath, createLink
+from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol.params import (PointerParam, FloatParam,
+                                        IntParam, BooleanParam,)
+from pyworkflow.utils.path import (makePath, createLink,
+                                   cleanPattern, moveFile,
+                                   exists)
 
-from cistem.convert import (writeReferences)
+from cistem import Plugin
+from cistem.convert import (writeReferences, geometryFromMatrix,
+                            rowToAlignment, HEADER_COLUMNS)
 from cistem.constants import *
 
 
@@ -44,24 +48,29 @@ class CistemProtRefine2D(em.ProtClassify2D):
     """ Protocol to run 2D classification in cisTEM. """
     _label = 'classify 2D'
 
+    def __init__(self, **args):
+        em.ProtClassify2D.__init__(self, **args)
+        self.stepsExecutionMode = STEPS_PARALLEL
+
     def _createFilenameTemplates(self):
         """ Centralize the names of the files. """
         myDict = {
             'run_stack': 'Refine2D/ParticleStacks/particle_stack_%(run)02d.mrc',
             'initial_cls': 'Refine2D/ClassAverages/reference_averages.mrc',
             'iter_cls': 'Refine2D/ClassAverages/class_averages_%(iter)04d.mrc',
-            'iter_par': 'Refine2D/Parameters/classification_input_par_%(iter)02d.par',
-            'iter_cls_block': 'Refine2D/class_dump_file_%(iter)02d_%(block)02d.dump'
+            'iter_par': 'Refine2D/Parameters/classification_input_par_%(iter)d.par',
+            'iter_par_block': 'Refine2D/Parameters/classification_input_par_%(iter)d_%(block)d.par',
+            'iter_cls_block': 'Refine2D/ClassAverages/class_dump_file_%(iter)d_%(block)d.dump',
+            'iter_cls_block_seed': 'Refine2D/ClassAverages/class_dump_file_%(iter)d_.dump'
         }
         self._updateFilenamesDict(myDict)
 
-    def _createIterTemplates(self, currRun):
+    def _createIterTemplates(self):
         """ Setup the regex on how to find iterations. """
-        clsFn = self._getExtraPath(self._getFileName('classes', run=currRun, iter=1))
-        self._iterTemplate = clsFn.replace('classes_01', 'classes_??')
-        # Iterations will be identify by classes_XX_ where XX is the iteration
-        #  number and is restricted to only 2 digits.
-        self._iterRegex = re.compile('classes_(\d{2})')
+        parFn = self._getExtraPath(self._getFileName('iter_par',
+                                                      iter=0))
+        self._iterTemplate = parFn.replace('0', '*')
+        self._iterRegex = re.compile('input_par_(\d{1,2})')
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -80,11 +89,11 @@ class CistemProtRefine2D(em.ProtClassify2D):
         form.addParam('inputParticles', PointerParam,
                       label="Input particles",
                       condition='not doContinue',
+                      pointerCondition='hasCTF',
                       important=True, pointerClass='SetOfParticles',
                       help='Select the input particles.')
         form.addParam('inputClassAvg', PointerParam,
                       condition='not doContinue',
-                      expertLevel=LEVEL_ADVANCED,
                       allowsNull=True,
                       label="Input class averages",
                       pointerClass='SetOfAverages',
@@ -188,7 +197,7 @@ class CistemProtRefine2D(em.ProtClassify2D):
                            'and 1 if classification suffers from the '
                            'disappearance of small classes or noisy class '
                            'averages.')
-        form.addParam('exclExdges', BooleanParam, default=False,
+        form.addParam('exclEdges', BooleanParam, default=False,
                       label='Exclude blank edges?',
                       help='Should particle boxes with blank edges be '
                            'excluded from classification? Blank edges can '
@@ -204,7 +213,7 @@ class CistemProtRefine2D(em.ProtClassify2D):
                            'then 30% and then 100% is often sufficient to '
                            'obtain good classes and this scheme will be '
                            'used when this option is selected.')
-        form.addParam('perc', FloatParam, default=100.0,
+        form.addParam('percUsed', FloatParam, default=100.0,
                       condition='not autoPerc',
                       label='Percent used',
                       help='The fraction of the dataset used for '
@@ -221,8 +230,8 @@ class CistemProtRefine2D(em.ProtClassify2D):
 
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
-        self.numberOfBlocks = self._defNumberOfCPUs()
-        #self._createFilenameTemplates()
+        self._createFilenameTemplates()
+        self._createIterTemplates()
         self._insertContinueStep()
         self._insertItersSteps()
         self._insertFunctionStep("createOutputStep")
@@ -232,13 +241,11 @@ class CistemProtRefine2D(em.ProtClassify2D):
             continueRun = self.continueRun.get()
             self.inputParticles.set(None)
             self.numberOfClassAvg.set(continueRun.numberOfClassAvg.get())
-
             if self.continueIter.get() == 'last':
                 self.initIter = continueRun._getCurrIter()
             else:
                 self.initIter = int(self.continueIter.get()) + 1
             self._insertFunctionStep('continueStep', self.initIter)
-
         else:
             self.initIter = 1
 
@@ -246,30 +253,31 @@ class CistemProtRefine2D(em.ProtClassify2D):
 
     def _insertItersSteps(self):
         """ Insert the steps for all iterations. """
+        self._insertFunctionStep('convertInputStep')
+        self.currPtcl = 1
         for iterN in self._allItersN():
-            initId = self._insertFunctionStep('initIterStep', iterN)
             paramsDic = self._getParamsIteration(iterN)
-            depsRefine = self._insertRefineIterStep(iterN, paramsDic, [initId])
-            self._insertFunctionStep("mergeStep", iterN, paramsDic,
-                                     prerequisites=depsRefine)
+            depsRefine = self._insertRefineIterStep(iterN, paramsDic)
+            if iterN > 1:
+                self._insertFunctionStep("mergeStep", iterN,
+                                         prerequisites=depsRefine)
 
-    def _insertRefineIterStep(self, iterN, paramsDic, depsInitId):
+    def _insertRefineIterStep(self, iterN, paramsDic):
         """ Execute the refinement for the current iteration """
         depsRefine = []
         if iterN == 1:
-            initAngStepId = self._insertFunctionStep("writeParStep",
-                                                     paramsDic,
-                                                     prerequisites=depsInitId)
-            for block in self._allBlocks():
-                refineId = self._insertFunctionStep("refineParticlesStep",
-                                                    iterN, block, paramsDic,
-                                                    prerequisites=[initAngStepId])
-                depsRefine.append(refineId)
+            initParStepId = self._insertFunctionStep("writeInitParStep")
+            refineId = self._insertFunctionStep("makeInitClassesStep",
+                                                paramsDic,
+                                                prerequisites=[initParStepId])
+            depsRefine.append(refineId)
         else:
-            for block in self._allBlocks():
-                refineId = self._insertFunctionStep("refineParticlesStep",
-                                                    iterN, block, paramsDic,
-                                                    prerequisites=depsInitId)
+            jobs, ptcls_per_job = self._getJobsParams()
+            for job in range(1, jobs + 1):
+                refineId = self._insertFunctionStep("refineStep",
+                                                    iterN, job,
+                                                    ptcls_per_job,
+                                                    paramsDic)
                 depsRefine.append(refineId)
         return depsRefine
 
@@ -286,172 +294,147 @@ class CistemProtRefine2D(em.ProtClassify2D):
         imgFn = self._getFileName('particles')
         self.writeParticlesByMic(imgFn)
 
-    def initIterStep(self, iterN):
+    def convertInputStep(self):
         self._createWorkingDirs()
         inputStack = self._getFileName('run_stack', run=0)
         inputClasses = self._getFileName('initial_cls')
+        imgFn = self._getExtraPath(inputStack)
+        self.writeParticlesByMic(imgFn)
+        inputCls = self.inputClassAvg.get() if self.inputClassAvg else None
 
-        if iterN == 1:
-            imgFn = self._getExtraPath(inputStack)
-            self.writeParticlesByMic(imgFn)
-            inputCls = self.inputClassAvg.get() if self.inputClassAvg else None
+        if inputCls is not None:
+            writeReferences(self.inputClassAvg.get(),
+                            self._getExtraPath(inputClasses))
 
-            if inputCls is not None:
-                writeReferences(self.inputClassAvg.get(),
-                                self._getExtraPath(inputClasses))
-        else:
-            pass
-            #self._splitParFile(iterN, self.numberOfBlocks)
-
-    def writeParStep(self, paramsDic):
+    def writeInitParStep(self):
         """ Construct a parameter file (.par). """
-        #  This function will be called only for iteration 1.
-        iterN = 1
-        iterDir = self._iterWorkingDir(iterN)
-        self._enterDir(iterDir)
+        #  This function will be called only for iterations 1 and 2.
+        parFn = self._getExtraPath(self._getFileName('iter_par', iter=1))
+        f = open(parFn, 'w')
+        f.write("C           PSI   THETA     PHI       SHX       SHY     MAG  "
+                "FILM      DF1      DF2  ANGAST  PSHIFT     OCC      LogP"
+                "      SIGMA   SCORE  CHANGE\n")
+        hasAlignment = self.hasAlignment()
 
-        inputParticles = self._getInputParticles()
-        magnification = inputParticles.getAcquisition().getMagnification()
-        params = {}
+        for i, part in self.iterParticlesByMic():
+            ctf = part.getCTF()
+            defocusU, defocusV, astig = ctf.getDefocusU(), ctf.getDefocusV(),\
+                                        ctf.getDefocusAngle()
+            phaseShift = ctf.getPhaseShift() or 0.00
 
-        for block in self._allBlocks():
-            more = 1
-            initPart, lastPart = self._initFinalBlockParticles(block)
-            params['initParticle'] = initPart
-            params['finalParticle'] = lastPart
-            paramDic = self._setParamsRefineParticles(iterN, block)
-            paramsRefine = dict(paramsDic.items() + params.items() + paramDic.items())
-            f = self.__openParamFile(block, paramsRefine)
+            if hasAlignment:
+                _, angles = geometryFromMatrix(part.getTransform().getMatrix())
+                psi = angles[2]
+            else:
+                psi = 0.0
 
-            # ToDo: Implement a better method to get the info particles.
-            #  Now, you iterate several times over the SetOfParticles
-            # (as many threads as you have)
-            micIdMap = self._getMicCounter()
-            for i, img in self.iterParticlesByMic():
-                if img.hasMicId():
-                    micId = img.getMicId()
-                elif img.hasCoordinate():
-                    micId = img.getCoordinate().getMicId()
-                else:
-                    micId = 0
+            string = '%7d%8.2f%8.2f%8.2f%10.2f%10.2f%8d%6d%9.1f%9.1f'\
+                     '%8.2f%8.2f%8.2f%10d%11.4f%8.2f%8.2f\n' % (
+                i + 1, psi, 0., 0., 0., 0., 0, 0, defocusU, defocusV,
+                astig, phaseShift, 100., 0, 10., 0., 0.)
 
-                film = micIdMap[micId]
-                ctf = img.getCTF()
-                defocusU, defocusV, astig = ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle()
-                partCounter = i + 1
+            f.write(string)
+        f.close()
 
-                if partCounter == lastPart:  # The last particle in the block
-                    more = 0
-                particleLine = ('1, %05d, %05d, %05f, %05f, %02f, %01d\n' %
-                                (magnification, film, defocusU, defocusV, astig, more))
-                self.__writeParamParticle(f, particleLine)
+    def makeInitClassesStep(self, paramsDic):
+        argsStr = self._getRefineArgs()
 
-                if more == 0:  # close the block.
-                    self.__closeParamFile(f, paramsRefine)
-                    break
-        self._leaveDir()
+        percUsed = self.numberOfClassAvg.get() * 300.0
+        percUsed = percUsed / self._getPtclsNumber()  * 100.0
+        if percUsed > 100.0:
+            percUsed = 100.0
 
-    def refineBlockStep(self, block):
-        """ This function execute the bash script for refine a subset(block) of images.
-        It will enter in the iteration dir and execute the script there.
-        """
-        iterDir = self._iterWorkingDir(1)
-        program = "./block%03d.sh" % block
-        os.chmod(join(iterDir, program), 0775)
-        self.runJob(program, "", cwd=iterDir)
+        paramsDic.update({
+            'input_params': self._getFileName('iter_par', iter=1),
+            'input_cls': '/dev/null',
+            'output_cls': self._getFileName('iter_cls', iter=1),
+            'output_params': '/dev/null',
+            'percUsed': percUsed / 100.0,
+            'dumpFn': '/dev/null'
+        })
 
-    def writeInitialAnglesStep(self):
-        """This function write a .par file with all necessary information for a refinement"""
+        cmdArgs = argsStr % paramsDic
+        self.runJob(self._getProgram('refine2d'), cmdArgs,
+                    cwd=self._getExtraPath(),
+                    env=Plugin.getEnviron())
 
-        self.micIdMap = {}
-        counter = 0;
-        for mic in self._micList:
-            self.micIdMap[mic['_micId']] = counter
-            counter = counter + 1
+    def refineStep(self, iterN, job, ptcls_per_job, paramsDic):
+        numPtcls = self._getPtclsNumber()
 
-        for block in self._allBlocks():
-            more = 1
-            _, lastPart = self._initFinalBlockParticles(block)
-            parFn = self._getFileName('input_par_block', block=block, iter=1, prevIter=0)
-            f = open(parFn, 'w')
-            f.write("C           PSI   THETA     PHI       SHX       SHY     MAG  FILM      DF1"
-                    "      DF2  ANGAST     OCC     -LogP      SIGMA   SCORE  CHANGE\n")
-
-            # ToDo: Implement a better method to get the info particles.
-            # Now, you iterate several times over the SetOfParticles (as many threads as you have)
-            for i, img in self.iterParticlesByMic():
-                partCounter = i + 1
-
-                if partCounter == lastPart:  # The last particle in the block
-                    more = 0
-
-                self.writeAnglesLines(partCounter, img, f)
-
-                if more == 0:  # close the block.
-                    f.close()
-                    break
-
-    def refineParticlesStep(self, iterN, block, paramsDic):
-        """Only refine the parameters of the SetOfParticles
-        """
-        param = {}
-
-        iterDir = self._iterWorkingDir(iterN)
-        iniPart, lastPart = self._initFinalBlockParticles(block)
-        prevIter = iterN - 1
-        param['inputParFn'] = self._getBaseName('input_par_block', block=block, iter=iterN, prevIter=prevIter)
-        param['initParticle'] = iniPart
-        param['finalParticle'] = lastPart
-
-        paramDic = self._setParamsRefineParticles(iterN, block)
-
-        paramsRefine = dict(paramsDic.items() + paramDic.items() + param.items())
-        args = self._prepareCommand()
-
-        if self.mode.get() != 0:
-            # frealign program is already in the args script, that's why runJob('')
-            self.runJob('', args % paramsRefine, cwd=iterDir)
+        if job == 1:
+            firstPart = 1
+            lastPart = 1 + int(ptcls_per_job)
+            self.currPtcl = lastPart + 1
         else:
-            pass
-            ##ugly hack when for reconstruction only, just copy the input files
-            # inFile  = self._getFileName('input_par_block', block= block, iter=iterN, prevIter=prevIter)
-            # outFile = self._getFileName('output_par_block', block=block, iter=iterN)
-            # print "I am in dir: ", os.getcwd()
-            # print "copying params files", inFile, outFile
-            # copyFile(inFile, outFile)
+            firstPart = self.currPtcl
+            lastPart = firstPart + int(ptcls_per_job)
+            if lastPart > numPtcls:
+                lastPart = numPtcls
+            self.currPtcl = lastPart + 1
 
-    def mergeStep(self, iterN, paramsDic):
-        """Reconstruct a volume from a SetOfParticles with its current parameters refined
-        """
-        self._mergeAllParFiles(iterN,
-                               self.numberOfBlocks)  # merge all parameter files generated in a refineIterStep function.
+        argsStr = self._getRefineArgs()
+        highRes = self._calcHighResLimit(self.finalIter,
+                                         self.highResLimit1.get(),
+                                         self.highResLimit2.get())
 
-        initParticle = 1
-        finalParticle = self._getInputParticles().getSize()
+        percUsed = self._calcPercUsed(self.finalIter,
+                                      iterN - 1,
+                                      self.numberOfClassAvg.get(),
+                                      numPtcls,
+                                      self.percUsed.get(),
+                                      self.autoPerc)
 
-        os.environ['NCPUS'] = str(self.numberOfBlocks)
-        paramsDic['frealign'] = self._getProgram()
-        paramsDic['outputParFn'] = self._getBaseName('output_vol_par', iter=iterN)
-        paramsDic['initParticle'] = initParticle
-        paramsDic['finalParticle'] = finalParticle
-        #         paramsDic['paramRefine'] = '0, 0, 0, 0, 0'
+        paramsDic.update({
+            'output_params': self._getFileName('iter_par_block', iter=iterN,
+                                               block=job),
+            'numberOfClassAvg': 0,  # determined from cls stack
+            'firstPart': firstPart,
+            'lastPart': lastPart,
+            'percUsed': percUsed / 100.0,
+            'highRes': highRes,
+            'dump': 'YES',
+            'dumpFn': self._getFileName('iter_cls_block', iter=iterN,
+                                        block=job)
+        })
 
-        params2 = self._setParams3DR(iterN)
+        cmdArgs = argsStr % paramsDic
+        self.runJob(self._getProgram('refine2d'), cmdArgs,
+                    cwd=self._getExtraPath(),
+                    env=Plugin.getEnviron())
 
-        params3DR = dict(paramsDic.items() + params2.items())
+    def mergeStep(self, iterN):
+        jobs, _ = self._getJobsParams()
+        self._mergeAllParFiles(iterN, jobs)
+        argsStr = self._getMergeArgs()
 
-        args = self._prepareCommand()
-        iterDir = self._iterWorkingDir(iterN)
-        # frealign program is already in the args script, that's why runJob('')
-        self.runJob('', args % params3DR, cwd=iterDir)
-        self._setLastIter(iterN)
+        paramsDic = {
+            'output_cls': self._getFileName('iter_cls', iter=iterN),
+            'dumpSeed': self._getFileName('iter_cls_block_seed', iter=iterN),
+            'numberOfJobs': jobs
+        }
+
+        cmdArgs = argsStr % paramsDic
+        self.runJob(self._getProgram('merge2d'), cmdArgs,
+                    cwd=self._getExtraPath(),
+                    env=Plugin.getEnviron())
+
+        dumpFns = self._getExtraPath('Refine2D/ClassAverages/class_dump_file_%d_*' % iterN)
+        cleanPattern(dumpFns)
 
     def createOutputStep(self):
-        pass  # should be implemented in subclasses
+        partSet = self._getInputParticlesPointer()
+        classes2D = self._createSetOfClasses2D(partSet.get())
+        self._fillClassesFromIter(classes2D, self._lastIter())
 
-    #--------------------------- INFO functions -------------------------------
+        self._defineOutputs(outputClasses=classes2D)
+        self._defineSourceRelation(partSet, classes2D)
+
+    # --------------------------- INFO functions ------------------------------
     def _validate(self):
         errors = []
+
+        if self.doContinue:
+            errors.append('Continue mode not implemented yet!')
 
         return errors
 
@@ -469,11 +452,17 @@ class CistemProtRefine2D(em.ProtClassify2D):
     def _methods(self):
         methods = "We classified input particles %s (%d items) " % (
             self.getObjectTag('inputParticles'),
-            self._getInputParticles().getSize())
+            self._getPtclsNumber())
         methods += "into %d classes using refine2d" % self.numberOfClassAvg
         return [methods]
 
+    def _citations(self):
+        return ['Sigworth1998', 'Scheres2005', 'Liang2015']
+
     #--------------------------- UTILS functions ------------------------------
+    def _getProgram(self, program='refine2d'):
+        return Plugin.getProgram(program)
+
     def _createWorkingDirs(self):
         for dirFn in ['Refine2D/ParticleStacks',
                       'Refine2D/ClassAverages',
@@ -494,179 +483,266 @@ class CistemProtRefine2D(em.ProtClassify2D):
     def _getInputParticles(self):
         return self._getInputParticlesPointer().get()
 
-    def _defNumberOfCPUs(self):
-        self._micList = []
-        self._getMicIdList()
-        cpus = max(self.numberOfMpi.get() - 1, self.numberOfThreads.get() - 1, 1)
-        numberOfMics = len(self._micList)
-        return min(cpus, numberOfMics)
+    def _getPtclsNumber(self):
+        return self._getInputParticles().getSize()
 
-    def _allBlocks(self):
-        """ Iterate over all numberOfCPUs. """
-        for i in range(1, self.numberOfBlocks + 1):
-            yield i
+    def _getJobsParams(self):
+        jobs = self.numberOfThreads.get()
+        parts = self._getPtclsNumber()
+        if parts - jobs < jobs:
+            ptcls_per_job = 1.0
+        else:
+            ptcls_per_job = round(float(parts - jobs) / jobs)
+
+        return jobs, ptcls_per_job
+
+    def _getIterNumber(self, index):
+        """ Return the list of iteration files, give the iterTemplate. """
+        result = None
+        files = sorted(glob(self._iterTemplate))
+        if files:
+            f = files[index]
+            s = self._iterRegex.search(f)
+            if s:
+                result = int(s.group(1))  # group 1 is 1 digit iteration number
+        return result
+
+    def _lastIter(self):
+        return self._getIterNumber(-1)
+
+    def _fillClassesFromIter(self, clsSet, iterN):
+        params = {'orderBy': ['_micId', 'id'],
+                  'direction': 'ASC'
+                  }
+        self._classesInfo = {}  # store classes info, indexed by class id
+        clsFn = self._getFileName('iter_cls', iter=iterN).replace('.mrc',
+                                                                  '.mrc:mrcs')
+        for classId in range(1, self.numberOfClassAvg.get() + 1):
+            self._classesInfo[classId] = (classId,
+                                          self._getExtraPath(clsFn))
+
+        clsSet.classifyItems(updateItemCallback=self._updateParticle,
+                             updateClassCallback=self._updateClass,
+                             itemDataIterator=self._iterRows(iterN),
+                             iterParams=params)
+
+    def _updateParticle(self, item, row):
+        vals = OrderedDict(zip(HEADER_COLUMNS, row))
+        item.setClassId(vals.get('FILM'))
+        item.setTransform(rowToAlignment(vals, item.getSamplingRate()))
+        item._cistemLogP = em.Float(vals.get('LogP'))
+        item._cistemSigma = em.Float(vals.get('SIGMA'))
+        item._cistemOCC = em.Float(vals.get('OCC'))
+        item._cistemScore = em.Float(vals.get('SCORE'))
+
+    def _updateClass(self, item):
+        classId = item.getObjId()
+        if classId in self._classesInfo:
+            index, fn = self._classesInfo[classId]
+            item.getRepresentative().setLocation(index, fn)
+
+    def _iterRows(self, iterN):
+        filePar = self._getFileName('iter_par', iter=iterN)
+        f1 = open(self._getExtraPath(filePar))
+        for line in f1:
+            if not line.startswith("C"):
+                values = map(float, line.strip().split())
+
+                yield values
+
+        f1.close()
+
+    def iterParticlesByMic(self):
+        """ Iterate the particles ordered by micrograph """
+        for i, part in enumerate(self._getInputParticles().iterItems(orderBy=['_micId', 'id'],
+                                                                     direction='ASC')):
+            yield i, part
 
     def writeParticlesByMic(self, stackFn):
         self._getInputParticles().writeStack(stackFn,
                                              orderBy=['_micId', 'id'],
                                              direction='ASC')
 
+    def hasAlignment(self):
+        inputParts = self._getInputParticles()
+        return inputParts.hasAlignment()
+
     def _getParamsIteration(self, iterN):
         """ Defining the current iteration """
         imgSet = self._getInputParticles()
+        acq = imgSet.getAcquisition()
 
-        # Prepare arguments to call program fralign_v9.exe
-        paramsDic = {'mode': self.mode.get(),
-                     'innerRadius': self.innerRadius.get(),
-                     'outerRadius': self.outerRadius.get(),
-                     'molMass': self.molMass.get(),
-                     'ThresholdMask': self.ThresholdMask.get(),
-                     'pseudoBFactor': self.pseudoBFactor.get(),
-                     'avePhaseResidual': self.avePhaseResidual.get(),
-                     'angStepSize': self.angStepSize.get(),
-                     'numberRandomSearch': int(self.numberRandomSearch.get()),
-                     'numberPotentialMatches': int(self.numberPotentialMatches.get()),
-                     'sym': self.symmetry.get(),
-                     'relMagnification': self.relMagnification.get(),
-                     'targetScore': self.targetScore.get(),
-                     'score': self.score.get(),
-                     'beamTiltX': self.beamTiltX.get(),
-                     'beamTiltY': self.beamTiltY.get(),
-                     'resol': self.resolution.get(),
-                     'lowRes': self.lowResolRefine.get(),
-                     'highRes': self.highResolRefine.get(),
-                     'resolClass': self.resolClass.get(),
-                     'defocusUncertainty': self.defocusUncertainty.get(),
-                     'Bfactor': self.Bfactor.get(),
-                     'sampling3DR': imgSet.getSamplingRate()
+        # Prepare arguments to call refine2d
+        paramsDic = {'input_stack': self._getFileName('run_stack', run=0),
+                     'input_params': self._getFileName('iter_par', iter=iterN-1),
+                     'input_cls': self._getFileName('iter_cls', iter=iterN-1),
+                     'output_params': self._getFileName('iter_par', iter=iterN),
+                     'output_cls': self._getFileName('iter_cls', iter=iterN),
+                     'numberOfClassAvg': self.numberOfClassAvg.get(),
+                     'firstPart': 1,
+                     'lastPart': 0,
+                     'percUsed': self.percUsed.get() / 100.0,
+                     'pixSize': imgSet.getSamplingRate(),
+                     'voltage': acq.getVoltage(),
+                     'sphAber': acq.getSphericalAberration(),
+                     'ampCont': acq.getAmplitudeContrast(),
+                     'maskRad': self.maskRad.get(),
+                     'lowRes': self.lowResLimit.get(),
+                     'highRes': self.highResLimit1.get(),
+                     'angStep': self.angStep.get(),
+                     'rangeX': self.rangeX.get(),
+                     'rangeY': self.rangeY.get(),
+                     'smooth': self.smooth.get(),
+                     'pad': 2,
+                     'normalize': 'YES',
+                     'invertContrast': 'NO',
+                     'exclEdges': 'YES' if self.exclEdges else 'NO',
+                     'dump': 'NO',
+                     'dumpFn': self._getFileName('iter_cls_block', iter=iterN,
+                                                 block=1)
                      }
 
-        # Get the particles stack
-        iterDir = self._iterWorkingDir(iterN)
-        paramsDic['imageFn'] = os.path.relpath(self._getFileName("particles"), iterDir)
-        acquisition = imgSet.getAcquisition()
-
-        # Get the amplitude Contrast of the micrographs
-        paramsDic['ampContrast'] = acquisition.getAmplitudeContrast()
-        # Get the scanned pixel size of the micrographs
-        paramsDic['scannedPixelSize'] = acquisition.getMagnification() * imgSet.getSamplingRate() / 10000
-        # Get the voltage and spherical aberration of the microscope
-        paramsDic['voltage'] = acquisition.getVoltage()
-        paramsDic['sphericalAberration'] = acquisition.getSphericalAberration()
-
-        # Defining the operation mode
-        if self.mode == MOD_RECONSTRUCTION:
-            paramsDic['mode'] = 0
-        elif self.mode == MOD_REFINEMENT:
-            paramsDic['mode'] = 1
-        elif self.mode == MOD_RANDOM_SEARCH_REFINEMENT:
-            paramsDic['mode'] = 2
-        elif self.mode == MOD_SIMPLE_SEARCH_REFINEMENT:
-            paramsDic['mode'] = 3
-        else:
-            paramsDic['mode'] = 4
-
-        # Defining the operation mode for iteration 1.
-        if self.Firstmode == MOD2_SIMPLE_SEARCH_REFINEMENT:
-            paramsDic['mode2'] = -3
-        else:
-            paramsDic['mode2'] = -4
-
-        # Defining if magnification refinement is going to do
-        if self.doMagRefinement and iterN != 1:
-            paramsDic['doMagRefinement'] = 'T'
-        else:
-            paramsDic['doMagRefinement'] = 'F'
-
-        # Defining if defocus refinement is going to do
-        if self.doDefRefinement and iterN != 1:
-            paramsDic['doDefocusRef'] = 'T'
-        else:
-            paramsDic['doDefocusRef'] = 'F'
-
-        # Defining if astigmatism refinement is going to do
-        if self.doAstigRefinement and iterN != 1:
-            paramsDic['doAstigRef'] = 'T'
-        else:
-            paramsDic['doAstigRef'] = 'F'
-
-        # Defining if defocus refinement for individual particles is going to do
-        if self.doDefPartRefinement and iterN != 1:
-            paramsDic['doDefocusPartRef'] = 'T'
-        else:
-            paramsDic['doDefocusPartRef'] = 'F'
-
-        if self.methodEwaldSphere == EWA_DISABLE:
-            paramsDic['metEwaldSphere'] = 0
-        elif self.methodEwaldSphere == EWA_SIMPLE:
-            paramsDic['metEwaldSphere'] = 1
-        elif self.methodEwaldSphere == EWA_REFERENCE:
-            paramsDic['metEwaldSphere'] = 2
-        elif self.methodEwaldSphere == EWA_SIMPLE_HAND:
-            paramsDic['metEwaldSphere'] = -1
-        else:
-            paramsDic['metEwaldSphere'] = -2
-
-        # Defining if apply extra real space symmetry
-        if self.doExtraRealSpaceSym:
-            paramsDic['doExtraRealSpaceSym'] = 'T'
-        else:
-            paramsDic['doExtraRealSpaceSym'] = 'F'
-
-        # Defining if wiener filter is going to apply
-        if self.doWienerFilter:
-            paramsDic['doWienerFilter'] = 'T'
-        else:
-            paramsDic['doWienerFilter'] = 'F'
-
-        # Defining if wiener filter is going to calculate and apply
-        if self.doBfactor:
-            paramsDic['doBfactor'] = 'T'
-        else:
-            paramsDic['doBfactor'] = 'F'
-
-        # Defining if matching projections is going to write
-        if self.writeMatchProjections:
-            paramsDic['writeMatchProj'] = 'T'
-        else:
-            paramsDic['writeMatchProj'] = 'F'
-
-        # Defining the method to FSC calcutalion
-        if self.methodCalcFsc == FSC_CALC:
-            paramsDic['metFsc'] = 0
-        elif self.methodCalcFsc == FSC_3DR_ODD:
-            paramsDic['metFsc'] = 1
-        elif self.methodCalcFsc == FSC_3DR_EVEN:
-            paramsDic['metFsc'] = 2
-        elif self.methodCalcFsc == FSC_3DR_ALL:
-            paramsDic['metFsc'] = 3
-
-        if self.doAditionalStatisFSC:
-            paramsDic['doAditionalStatisFSC'] = 'T'
-        else:
-            paramsDic['doAditionalStatisFSC'] = 'F'
-
-        if self.memory == MEM_0:
-            paramsDic['memory'] = 0
-        elif self.memory == MEM_1:
-            paramsDic['memory'] = 1
-        elif self.memory == MEM_2:
-            paramsDic['memory'] = 2
-        else:
-            paramsDic['memory'] = 3
-
-        if self.interpolationScheme == INTERPOLATION_0:
-            paramsDic['interpolation'] = 0
-        else:
-            paramsDic['interpolation'] = 1
-
-        if self.paramRefine == REF_ALL:
-            paramsDic['paramRefine'] = '1, 1, 1, 1, 1'
-        elif self.paramRefine == REF_ANGLES:
-            paramsDic['paramRefine'] = '1, 1, 1, 0, 0'
-        elif self.paramRefine == REF_SHIFTS:
-            paramsDic['paramRefine'] = '0, 0, 0, 1, 1'
-        else:
-            paramsDic['paramRefine'] = '0, 0, 0, 0, 0'
-
         return paramsDic
+
+    def _getRefineArgs(self):
+        argsStr = """ << eof
+%(input_stack)s
+%(input_params)s
+%(input_cls)s
+%(output_params)s
+%(output_cls)s
+%(numberOfClassAvg)d
+%(firstPart)d
+%(lastPart)d
+%(percUsed)f
+%(pixSize)f
+%(voltage)f
+%(sphAber)f
+%(ampCont)f
+%(maskRad)f
+%(lowRes)f
+%(highRes)f
+%(angStep)f
+%(rangeX)f
+%(rangeY)f
+%(smooth)f
+%(pad)d
+%(normalize)s
+%(invertContrast)s
+%(exclEdges)s
+%(dump)s
+%(dumpFn)s
+eof
+"""
+        return argsStr
+
+    def _mergeAllParFiles(self, iterN, numberOfBlocks):
+        """ This method merge all parameters files that has been
+        created in a refineStep. """
+        self._enterDir(self._getExtraPath())
+        outFn = self._getFileName('iter_par', iter=iterN)
+
+        if numberOfBlocks != 1:
+            f1 = open(outFn, 'w+')
+            f1.write("C           PSI   THETA     PHI       SHX       SHY     MAG  "
+                "FILM      DF1      DF2  ANGAST  PSHIFT     OCC      LogP"
+                "      SIGMA   SCORE  CHANGE\n")
+            for block in range(1, numberOfBlocks + 1):
+                parFn = self._getFileName('iter_par_block', iter=iterN,
+                                          block=block)
+                if not exists(parFn):
+                    raise Exception("Error: file %s does not exist" % parFn)
+                f2 = open(parFn)
+
+                for l in f2:
+                    if not l.startswith('C'):
+                        f1.write(l)
+                f2.close()
+                cleanPattern(parFn)
+            f1.close()
+        else:
+            parFn = self._getFileName('iter_par_block', iter=iterN, block=1)
+            moveFile(parFn, outFn)
+
+        self._leaveDir()
+
+    def _getMergeArgs(self):
+        argsStr = """ << eof
+%(output_cls)s
+%(dumpSeed)s
+%(numberOfJobs)d
+eof
+"""
+        return argsStr
+
+    def _calcHighResLimit(self, iter_total, highRes1, highRes2):
+        """ Ramp up the high resolution limit.
+        Copied from MyRefine2DPanel.cpp of cisTEM. """
+        if iter_total > 1:
+            if iter_total >= 4:
+                reachMaxHighResAtCycle = iter_total * 3 / 4
+            else:
+                reachMaxHighResAtCycle = iter_total
+            if iter_total >= reachMaxHighResAtCycle:
+                highRes = highRes2
+            else:
+                highRes = highRes1 + iter_total / (reachMaxHighResAtCycle - 1) * (highRes2 - highRes1)
+        else:
+            highRes = highRes2
+
+        return highRes
+
+    def _calcPercUsed(self, iter_total, iter_done, numCls,
+                      numParts, percUsed, autoPerc=True):
+        """ Copied from MyRefine2DPanel.cpp of cisTEM. """
+        minPercUsed = percUsed
+        if autoPerc:
+            if iter_total < 10:
+                percUsed = 100.0
+            else:
+                if iter_total < 20:
+                    if iter_done < 5:
+                        percUsed = numCls * 300 / numParts * 100.0
+                        if percUsed > 100.0:
+                            percUsed = 100.0
+                    else:
+                        if iter_done < iter_total - 5:
+                            percUsed = numCls * 300 / numParts * 100.0
+                            if percUsed > 100.0:
+                                percUsed = 100.0
+                            elif percUsed < 30:
+                                percUsed = 30.0
+                        else:
+                            percUsed = 100.0
+                elif iter_total < 30:
+                    if iter_done < 10:
+                        percUsed = numCls * 300 / numParts * 100.0
+                        if percUsed > 100.0:
+                            percUsed = 100.0
+                    elif iter_done < iter_total - 5:
+                        percUsed = numCls * 300 / numParts * 100.0
+                        if percUsed > 100.0:
+                            percUsed = 100.0
+                        elif percUsed < 30:
+                            percUsed = 30.0
+                    else:
+                        percUsed = 100.0
+                else:
+                    if iter_done < 15:
+                        percUsed = numCls * 300 / numParts * 100.0
+                        if percUsed > 100.0:
+                            percUsed = 100.0
+                    elif iter_done < iter_total - 5:
+                        percUsed = numCls * 300 / numParts * 100.0
+                        if percUsed > 100.0:
+                            percUsed = 100.0
+                        elif percUsed < 30:
+                            percUsed = 30.0
+                    else:
+                        percUsed = 100.0
+        else:
+            percUsed = percUsed
+        if percUsed < minPercUsed:
+            percUsed = minPercUsed
+
+        return percUsed

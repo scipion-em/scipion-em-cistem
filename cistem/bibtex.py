@@ -101,4 +101,45 @@ url = "http://www.sciencedirect.com/science/article/pii/S1047847703002405",
 author = "Fred J. Sigworth",
 }
 
+@article{Sigworth1998,
+title = "A Maximum-Likelihood Approach to Single-Particle Image Refinement",
+journal = "Journal of Structural Biology",
+volume = "122",
+number = "3",
+pages = "328 - 339",
+year = "1998",
+issn = "1047-8477",
+doi = "http://doi.org/10.1006/jsbi.1998.4014",
+url = "http://www.sciencedirect.com/science/article/pii/S104784779894014X",
+author = "F.J. Sigworth",
+keywords = "electron microscopy, maximum likelihood, single-particle alignment.",
+}
+
+@article{Scheres2005,
+title = "Maximum-likelihood Multi-reference Refinement for Electron Microscopy Images",
+journal = "Journal of Molecular Biology",
+volume = "348",
+number = "1",
+pages = "139 - 149",
+year = "2005",
+issn = "0022-2836",
+doi = "http://doi.org/10.1016/j.jmb.2005.02.031",
+url = "http://www.sciencedirect.com/science/article/pii/S0022283605001932",
+author = "Sjors H.W. Scheres and Mikel Valle and Rafael Nunez and Carlos O.S. Sorzano and Roberto Marabini and Gabor T. Herman and Jose-Maria Carazo",
+keywords = "maximum-likelihood, multi-reference refinement, single-particles, 2D-alignment, classification",
+}
+
+@article{Liang2015,
+doi = {10.1016/j.cell.2015.06.018},
+url = {http://doi.org/10.1016/j.cell.2015.06.018},
+year = {2015},
+month = jul,
+volume = {162},
+number = {2},
+pages = {314--327},
+author = {Bo Liang and Zongli Li and Simon Jenni and Amal A. Rahmeh and Benjamin M. Morin and Timothy Grant and Nikolaus Grigorieff and Stephen C. Harrison and Sean P.J. Whelan},
+title = {Structure of the L Protein of Vesicular Stomatitis Virus from Electron Cryomicroscopy},
+journal = {Cell}
+}
+
 """
