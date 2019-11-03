@@ -99,6 +99,10 @@ class CistemProtRefine2D(em.ProtClassify2D):
                       pointerClass='SetOfAverages',
                       help='Select starting class averages. If not provided, '
                            'they will be generated automatically.')
+        form.addParam('areParticlesBlack', BooleanParam,
+                       default=False,
+                       label='Are the particles black?',
+                       help='cisTEM requires particles to be black on white.')
         form.addParam('numberOfClassAvg', IntParam, default=5,
                       label='Number of classes',
                       help='The number of classes that should be generated. '
@@ -459,7 +463,7 @@ class CistemProtRefine2D(em.ProtClassify2D):
     def _citations(self):
         return ['Sigworth1998', 'Scheres2005', 'Liang2015']
 
-    #--------------------------- UTILS functions ------------------------------
+    # --------------------------- UTILS functions -----------------------------
     def _getProgram(self, program='refine2d'):
         return Plugin.getProgram(program)
 
@@ -487,12 +491,13 @@ class CistemProtRefine2D(em.ProtClassify2D):
         return self._getInputParticles().getSize()
 
     def _getJobsParams(self):
-        jobs = self.numberOfThreads.get()
+        jobs = max(self.numberOfThreads.get(),
+                   self.numberOfMpi.get())
         parts = self._getPtclsNumber()
         if parts - jobs < jobs:
             ptcls_per_job = 1.0
         else:
-            ptcls_per_job = round(float(parts - jobs) / jobs)
+            ptcls_per_job = round(float(parts / jobs))
 
         return jobs, ptcls_per_job
 
@@ -595,7 +600,7 @@ class CistemProtRefine2D(em.ProtClassify2D):
                      'smooth': self.smooth.get(),
                      'pad': 2,
                      'normalize': 'YES',
-                     'invertContrast': 'NO',
+                     'invertContrast': 'NO' if self.areParticlesBlack else 'YES',
                      'exclEdges': 'YES' if self.exclEdges else 'NO',
                      'dump': 'NO',
                      'dumpFn': self._getFileName('iter_cls_block', iter=iterN,

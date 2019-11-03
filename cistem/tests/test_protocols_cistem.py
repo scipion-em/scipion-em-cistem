@@ -30,7 +30,8 @@ from pyworkflow.em import *
 from pyworkflow.tests import *
 
 from cistem import *
-from cistem.protocols import CistemProtCTFFind, CistemProtFindParticles
+from cistem.protocols import (CistemProtCTFFind, CistemProtFindParticles,
+                              CistemProtRefine2D)
 
 
 class TestBase(BaseTest):
@@ -69,6 +70,22 @@ class TestBase(BaseTest):
                                        sphericalAberration=2)
 
     @classmethod
+    def runImportParticlesSqlite(cls, sqliteFn, sampling):
+        """ Run an Import particles protocol. """
+        protImport = cls.newProtocol(ProtImportParticles,
+                                     importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
+                                     sqliteFile=sqliteFn,
+                                     samplingRate=sampling,
+                                     haveDataBeenPhaseFlipped=False)
+        cls.launchProtocol(protImport)
+
+        if protImport.outputParticles is None:
+            raise Exception('Import of particles: %s, failed. '
+                            'outputParticles is None.' % sqliteFn)
+
+        return protImport
+
+    @classmethod
     def runCtffind(cls, inputMics):
         """ Run CTFFind protocol. """
         cls.protCTF = CistemProtCTFFind()
@@ -91,7 +108,7 @@ class TestCtffind4(TestBase):
     def testCtffind4V1(self):
         protCTF = CistemProtCTFFind()
         protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
-        self.proj.launchProtocol(protCTF, wait=True)
+        self.launchProtocol(protCTF, wait=True)
         self.assertIsNotNone(protCTF.outputCTF, "SetOfCTF has not been produced.")
 
         valuesList = [[24067, 23587, 58], [22373, 22039, 66], [22653, 22480, 5]]
@@ -114,6 +131,28 @@ class TestFindParticles(TestBase):
         protPick.inputMicrographs.set(self.protImport.outputMicrographs)
         protPick.ctfRelations.set(self.protCtfRun.outputCTF)
 
-        self.proj.launchProtocol(protPick, wait=True)
+        self.launchProtocol(protPick, wait=True)
         self.assertIsNotNone(protPick.outputCoordinates,
                              "SetOfCoordinates has not been produced.")
+
+
+class TestRefine2D(TestBase):
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('relion_tutorial')
+        cls.particlesFn = cls.dataset.getFile('import/case2/particles.sqlite')
+        cls.protImport = cls.runImportParticlesSqlite(cls.particlesFn,
+                                                      sampling=3.5)
+
+    def testClassify2D(self):
+        prot2D = self.newProtocol(CistemProtRefine2D,
+                                  numberOfThreads=3)
+        prot2D.numberOfClassAvg.set(4)
+        prot2D.numberOfIterations.set(3)
+        prot2D.areParticlesBlack.set(False)
+        prot2D.inputParticles.set(self.protImport.outputParticles)
+
+        self.launchProtocol(prot2D)
+        self.assertIsNotNone(prot2D.outputClasses,
+                             "SetOfClasses2D has not been produced.")
