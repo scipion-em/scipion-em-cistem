@@ -47,6 +47,7 @@ To check the installation, simply run one of the following Scipion tests:
    scipion test cistem.tests.test_protocols_cistem.TestCtffind4
    scipion test cistem.tests.test_protocols_cistem.TestFindParticles
    scipion test cistem.tests.test_protocols_cistem.TestRefine2D
+   scipion test cistem.tests.test_protocols_cistem.TestAbInitio
 
 A complete list of tests can also be seen by executing ``scipion test --show --grep cistem``
 
@@ -63,6 +64,7 @@ Protocols
 * unblur
 * find particles
 * classify 2D
+* ab-initio
 
 References
 ----------

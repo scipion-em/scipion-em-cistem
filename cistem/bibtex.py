@@ -142,4 +142,17 @@ title = {Structure of the L Protein of Vesicular Stomatitis Virus from Electron 
 journal = {Cell}
 }
 
+@article{Grigorieff2016,
+title = "Chapter Eight - Frealign: An Exploratory Tool for Single-Particle Cryo-EM",
+journal = "Methods in Enzymology",
+volume = "579",
+pages = "191 - 226",
+year = "2016",
+booktitle = "The Resolution Revolution: Recent Advances In cryoEM",
+issn = "0076-6879",
+doi = "http://doi.org/10.1016/bs.mie.2016.04.013",
+url = "http://www.sciencedirect.com/science/article/pii/S0076687916300313",
+author = "N. Grigorieff",
+}
+
 """

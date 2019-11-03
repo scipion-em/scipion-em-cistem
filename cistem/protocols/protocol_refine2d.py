@@ -144,7 +144,7 @@ class CistemProtRefine2D(em.ProtClassify2D):
                                  'signal originating from protein secondary '
                                  'structure that often helps generate recognizable '
                                  'features in the class averages (see example above).')
-        line.addParam('highResLimit1', FloatParam, default=8.0,
+        line.addParam('highResLimit1', FloatParam, default=40.0,
                       label='start')
         line.addParam('highResLimit2', FloatParam, default=8.0,
                       label='finish')
@@ -157,7 +157,7 @@ class CistemProtRefine2D(em.ProtClassify2D):
                            'the largest dimension of the particle. The mask '
                            'helps remove noise outside the area of the '
                            'particle.')
-        form.addParam('angStep', FloatParam, default=8.0,
+        form.addParam('angStep', FloatParam, default=15.0,
                       label='Angular search step (deg)',
                       help='The angular step used to generate the search grid '
                            'when marginalizing over the in-plane rotational '
@@ -185,9 +185,9 @@ class CistemProtRefine2D(em.ProtClassify2D):
                                  'is unknown, start with a larger value, e.g. '
                                  '100 A, check the results when the run '
                                  'finishes and reduce the range appropriately.')
-        line.addParam('rangeX', FloatParam, default=75.0,
+        line.addParam('rangeX', FloatParam, default=60.0,
                       label='X')
-        line.addParam('rangeY', FloatParam, default=75.0,
+        line.addParam('rangeY', FloatParam, default=60.0,
                       label='Y')
 
         form.addParam('smooth', FloatParam, default=1.0,
