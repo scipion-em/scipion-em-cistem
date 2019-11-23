@@ -57,14 +57,22 @@ class Plugin(pyworkflow.em.Plugin):
     @classmethod
     def getProgram(cls, program):
         """ Return the program binary that will be used. """
-        program = os.path.join(cls.getHome(), program)
-        return program
+        binary = os.path.join(cls.getHome(), program)
+        if program == CTFFIND4_BIN:
+            # if CTFFIND4_HOME is defined, use it
+            path = os.environ.get(CTFFIND4_HOME, None) or cls.getHome()
+            binary = os.path.join(path, program)
+
+        return binary
 
     @classmethod
     def defineBinaries(cls, env):
         env.addPackage('cistem', version='1.0.0',
                        tar='cistem-1.0.0-beta-intel-linux.tar.gz',
                        default=True)
+
+        env.addPackage('ctffind4', version='4.1.13',
+                       tar='ctffind4-4.1.13.tgz')
 
 
 pyworkflow.em.Domain.registerPlugin(__name__)
