@@ -43,7 +43,7 @@ class Plugin(pyworkflow.em.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(CISTEM_HOME, 'cistem-1.0.0')
+        cls._defineEmVar(CISTEM_HOME, 'cistem-1.0.0-beta')
 
     @classmethod
     def getEnviron(cls):
@@ -67,8 +67,10 @@ class Plugin(pyworkflow.em.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        env.addPackage('cistem', version='1.0.0',
-                       tar='cistem-1.0.0-beta-intel-linux.tar.gz',
+        env.addPackage('cistem', version='1.0.0-beta',
+                       url='"https://cistem.org/system/tdf/upload3/cistem-1.0.0'
+                           '-beta-intel-linux.tar.gz?file=1&type=cistem_details'
+                           '&id=37&force=0&s3fs=1"',
                        default=True)
 
         env.addPackage('ctffind4', version='4.1.13',
