@@ -26,11 +26,11 @@
 
 from pyworkflow.utils import removeExt
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewers import CtfView, EmPlotter, MicrographsView
-import pyworkflow.em.viewers.showj as showj
+from pwem.viewers import CtfView, EmPlotter, MicrographsView
+import pwem.viewers.showj as showj
 from pyworkflow.gui.project import ProjectWindow
 
-from cistem.protocols import CistemProtCTFFind, CistemProtUnblur
+from .protocols import CistemProtCTFFind, CistemProtUnblur
 
 
 def createCtfPlot(ctfSet, ctfId):
@@ -83,6 +83,7 @@ def _plotCurve(a, i, fn):
     freqs = _getValues(fn, 0)
     curv = _getValues(fn, i)
     a.plot(freqs, curv)
+
 
 def _getValues(fn, row):
     f = open(fn)

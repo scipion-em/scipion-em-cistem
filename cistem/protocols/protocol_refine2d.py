@@ -26,30 +26,31 @@
 # *
 # **************************************************************************
 
+import os
 import re
 from glob import glob
 from collections import OrderedDict
 
-import pyworkflow.em as em
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         IntParam, BooleanParam,)
 from pyworkflow.utils.path import (makePath, createLink,
-                                   cleanPattern, moveFile,
-                                   exists)
+                                   cleanPattern, moveFile)
+from pyworkflow.object import Float
+from pwem.protocols import ProtClassify2D
 
 from cistem import Plugin
-from cistem.convert import (writeReferences, geometryFromMatrix,
-                            rowToAlignment, HEADER_COLUMNS)
-from cistem.constants import *
+from ..convert import (writeReferences, geometryFromMatrix,
+                       rowToAlignment, HEADER_COLUMNS)
+from ..constants import *
 
 
-class CistemProtRefine2D(em.ProtClassify2D):
+class CistemProtRefine2D(ProtClassify2D):
     """ Protocol to run 2D classification in cisTEM. """
     _label = 'classify 2D'
 
     def __init__(self, **args):
-        em.ProtClassify2D.__init__(self, **args)
+        ProtClassify2D.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL
 
     def _createFilenameTemplates(self):
@@ -535,10 +536,10 @@ class CistemProtRefine2D(em.ProtClassify2D):
         vals = OrderedDict(zip(HEADER_COLUMNS, row))
         item.setClassId(vals.get('FILM'))
         item.setTransform(rowToAlignment(vals, item.getSamplingRate()))
-        item._cistemLogP = em.Float(vals.get('LogP'))
-        item._cistemSigma = em.Float(vals.get('SIGMA'))
-        item._cistemOCC = em.Float(vals.get('OCC'))
-        item._cistemScore = em.Float(vals.get('SCORE'))
+        item._cistemLogP = Float(vals.get('LogP'))
+        item._cistemSigma = Float(vals.get('SIGMA'))
+        item._cistemOCC = Float(vals.get('OCC'))
+        item._cistemScore = Float(vals.get('SCORE'))
 
     def _updateClass(self, item):
         classId = item.getObjId()
@@ -650,12 +651,12 @@ eof
         if numberOfBlocks != 1:
             f1 = open(outFn, 'w+')
             f1.write("C           PSI   THETA     PHI       SHX       SHY     MAG  "
-                "FILM      DF1      DF2  ANGAST  PSHIFT     OCC      LogP"
-                "      SIGMA   SCORE  CHANGE\n")
+                     "FILM      DF1      DF2  ANGAST  PSHIFT     OCC      LogP"
+                     "      SIGMA   SCORE  CHANGE\n")
             for block in range(1, numberOfBlocks + 1):
                 parFn = self._getFileName('iter_par_block', iter=iterN,
                                           block=block)
-                if not exists(parFn):
+                if not os.path.exists(parFn):
                     raise Exception("Error: file %s does not exist" % parFn)
                 f2 = open(parFn)
 

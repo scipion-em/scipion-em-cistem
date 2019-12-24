@@ -31,12 +31,15 @@
 import os
 
 import pyworkflow as pw
+from pwem.protocols import ProtCTFMicrographs
+from pwem.objects import CTFModel
+from pwem.convert import ImageHandler, DT_FLOAT
 
-from cistem.constants import *
+from ..constants import *
 from .program_ctffind import ProgramCtffind
 
 
-class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
+class CistemProtCTFFind(ProtCTFMicrographs):
     """
     Estimates CTF for a set of micrographs/movies with ctffind4.
     
@@ -50,7 +53,7 @@ class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
         self._defineStreamingParams(form)
 
     def _defineCtfParamsDict(self):
-        pw.em.ProtCTFMicrographs._defineCtfParamsDict(self)
+        ProtCTFMicrographs._defineCtfParamsDict(self)
         self._ctfProgram = ProgramCtffind(self)
 
     # -------------------------- STEPS functions ------------------------------
@@ -62,12 +65,12 @@ class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
         pw.utils.makePath(micDir)
         micFnMrc = os.path.join(micDir, pw.utils.replaceBaseExt(micFn, 'mrc'))
 
-        ih = pw.em.ImageHandler()
+        ih = ImageHandler()
 
         if not ih.existsLocation(micFn):
             raise Exception("Missing input micrograph: %s" % micFn)
 
-        ih.convert(micFn, micFnMrc, pw.em.DT_FLOAT)
+        ih.convert(micFn, micFnMrc, DT_FLOAT)
 
         try:
             program, args = self._ctfProgram.getCommand(
@@ -79,10 +82,8 @@ class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
 
             pw.utils.cleanPath(micDir)
 
-        except:
+        except Exception as ex:
             print("ERROR: Ctffind has failed for %s" % micFnMrc)
-            import traceback
-            traceback.print_exc()
 
     def _estimateCTF(self, mic, *args):
         self._doCtfEstimation(mic)
@@ -133,7 +134,7 @@ class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
 
     # -------------------------- UTILS functions ------------------------------
     def _getRecalCtfParamsDict(self, ctfModel):
-        values = map(float, ctfModel.getObjComment().split())
+        values = list(map(float, ctfModel.getObjComment().split()))
         sampling = self.inputMicrographs.get().getSamplingRate()
         return {
             'step_focus': 500.0,
@@ -161,12 +162,12 @@ class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
         return self._ctfProgram.parseOutput(filename)
 
     def _getCTFModel(self, defocusU, defocusV, defocusAngle, psdFile):
-        ctf = pw.em.CTFModel()
+        ctf = CTFModel()
         ctf.setStandardDefocus(defocusU, defocusV, defocusAngle)
         ctf.setPsdFile(psdFile)
 
         return ctf
 
     def _summary(self):
-        summary = pw.em.ProtCTFMicrographs._summary(self)
+        summary = ProtCTFMicrographs._summary(self)
         return summary

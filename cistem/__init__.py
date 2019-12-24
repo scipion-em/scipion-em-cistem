@@ -26,7 +26,7 @@
 
 import os
 
-import pyworkflow.em
+import pwem
 import pyworkflow.utils as pwutils
 
 from .constants import *
@@ -36,7 +36,7 @@ _logo = "cistem_logo.png"
 _references = ['Grant2018']
 
 
-class Plugin(pyworkflow.em.Plugin):
+class Plugin(pwem.Plugin):
     _homeVar = CISTEM_HOME
     _pathVars = [CISTEM_HOME]
     _supportedVersions = [V1_0_0]
@@ -77,4 +77,4 @@ class Plugin(pyworkflow.em.Plugin):
                        tar='ctffind4-4.1.13.tgz')
 
 
-pyworkflow.em.Domain.registerPlugin(__name__)
+pwem.Domain.registerPlugin(__name__)

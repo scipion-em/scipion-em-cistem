@@ -30,22 +30,24 @@
 
 import os
 import time
-from itertools import izip
+try:
+    from itertools import izip
+except:
+    izip = zip
 from math import ceil
 from threading import Thread
 
 import pyworkflow.utils as pwutils
-import pyworkflow.em as em
-from pyworkflow.em.data import MovieAlignment
+from pwem.objects import MovieAlignment
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.em.protocol import ProtAlignMovies
+from pwem.protocols import ProtAlignMovies
 import pyworkflow.protocol.params as params
 from pyworkflow.gui.plotter import Plotter
 
 from cistem import Plugin
-from cistem.convert import (readShiftsMovieAlignment,
-                            writeShiftsMovieAlignment)
-from cistem.constants import UNBLUR_BIN
+from ..convert import (readShiftsMovieAlignment,
+                       writeShiftsMovieAlignment)
+from ..constants import UNBLUR_BIN
 
 
 class CistemProtUnblur(ProtAlignMovies):

@@ -24,9 +24,10 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.wizard import *
+from pwem.wizards import *
+from pwem.constants import UNIT_ANGSTROM
 
-from cistem.protocols import CistemProtCTFFind
+from .protocols import CistemProtCTFFind
 
 
 class BrandeisCTFWizard(CtfWizard):

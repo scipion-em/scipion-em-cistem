@@ -28,15 +28,15 @@ import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.em.constants import RELATION_CTF
-from pyworkflow.em import ProtParticlePickingAuto
-from pyworkflow.em.convert import ImageHandler
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
+from pwem.constants import RELATION_CTF
+from pwem.protocols import ProtParticlePickingAuto
+from pwem.convert import ImageHandler
 
 from cistem import Plugin
-from cistem.convert import readSetOfCoordinates, writeReferences
-from cistem.constants import *
+from ..convert import readSetOfCoordinates, writeReferences
+from ..constants import *
 
 
 class CistemProtFindParticles(ProtParticlePickingAuto):
@@ -199,7 +199,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
         # Remove the micrographs that have no CTF
         # and set the CTF property for those who have it
-        for micKey, mic in micDict.iteritems():
+        for micKey, mic in micDict.items():
             if micKey in ctfDict:
                 mic.setCTF(ctfDict[micKey])
             else:

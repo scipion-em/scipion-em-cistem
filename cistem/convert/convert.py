@@ -26,12 +26,15 @@
 
 import os
 import numpy as np
-from itertools import izip
+try:
+    from itertools import izip
+except:
+    izip = zip
 
-from pyworkflow.em.data import Coordinate, SetOfClasses2D, SetOfAverages
-from pyworkflow.em import ImageHandler, Transform
-import pyworkflow.em.convert.transformations as transformations
-from pyworkflow.utils.path import replaceBaseExt, join, exists
+from pwem.objects import Coordinate, SetOfClasses2D, SetOfAverages, Transform
+from pwem.convert import ImageHandler
+import pwem.convert.transformations as transformations
+from pyworkflow.utils import replaceBaseExt, join, exists
 
 
 HEADER_COLUMNS = ['INDEX', 'PSI', 'THETA', 'PHI', 'SHX', 'SHY', 'MAG',

@@ -26,12 +26,12 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import *
 from pyworkflow.tests import *
+from pwem.protocols import ProtImportMicrographs, ProtImportParticles
 
 from cistem import *
-from cistem.protocols import (CistemProtCTFFind, CistemProtFindParticles,
-                              CistemProtRefine2D)
+from ..protocols import (CistemProtCTFFind, CistemProtFindParticles,
+                         CistemProtRefine2D)
 
 
 class TestBase(BaseTest):
@@ -112,7 +112,7 @@ class TestCtffind4(TestBase):
         self.assertIsNotNone(protCTF.outputCTF, "SetOfCTF has not been produced.")
 
         valuesList = [[24067, 23587, 58], [22373, 22039, 66], [22653, 22480, 5]]
-        for ctfModel, values in izip(protCTF.outputCTF, valuesList):
+        for ctfModel, values in zip(protCTF.outputCTF, valuesList):
             self.assertAlmostEquals(ctfModel.getDefocusU(),values[0], delta=1000)
             self.assertAlmostEquals(ctfModel.getDefocusV(),values[1], delta=1000)
             self.assertAlmostEquals(ctfModel.getDefocusAngle(),values[2], delta=10)

@@ -25,12 +25,11 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import *
 from pyworkflow.tests import *
+from pwem.protocols import ProtImportMovies
 
 from cistem import *
-from cistem.protocols import CistemProtUnblur
-
+from ..protocols import CistemProtUnblur
 
 
 class TestMoviesBase(BaseTest):

@@ -29,12 +29,12 @@
 
 from numpy import deg2rad
 
-import pyworkflow.em as pwem
+from pwem.objects import CTFModel
 import pyworkflow.protocol.params as params
 
 from cistem import Plugin
-from cistem.constants import CTFFIND4_BIN
-import cistem.convert as convert
+from ..constants import CTFFIND4_BIN
+from ..convert import parseCtffind4Output, readCtfModel
 
 
 class ProgramCtffind:
@@ -184,14 +184,14 @@ class ProgramCtffind:
         """ Retrieve defocus U, V and angle from the
         output file of the program execution.
         """
-        return convert.parseCtffind4Output(filename)
+        return parseCtffind4Output(filename)
 
     def parseOutputAsCtf(self, filename, psdFile=None):
         """ Parse the output file and build the CTFModel object
         with the values.
         """
-        ctf = pwem.CTFModel()
-        convert.readCtfModel(ctf, filename)
+        ctf = CTFModel()
+        readCtfModel(ctf, filename)
         if psdFile:
             ctf.setPsdFile(psdFile)
 
