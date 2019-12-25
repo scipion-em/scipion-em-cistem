@@ -69,7 +69,7 @@ class CistemProtRefine2D(ProtClassify2D):
     def _createIterTemplates(self):
         """ Setup the regex on how to find iterations. """
         parFn = self._getExtraPath(self._getFileName('iter_par',
-                                                      iter=0))
+                                                     iter=0))
         self._iterTemplate = parFn.replace('0', '*')
         self._iterRegex = re.compile('input_par_(\d{1,2})')
 
@@ -101,9 +101,9 @@ class CistemProtRefine2D(ProtClassify2D):
                       help='Select starting class averages. If not provided, '
                            'they will be generated automatically.')
         form.addParam('areParticlesBlack', BooleanParam,
-                       default=False,
-                       label='Are the particles black?',
-                       help='cisTEM requires particles to be black on white.')
+                      default=False,
+                      label='Are the particles black?',
+                      help='cisTEM requires particles to be black on white.')
         form.addParam('numberOfClassAvg', IntParam, default=5,
                       label='Number of classes',
                       help='The number of classes that should be generated. '
@@ -345,7 +345,7 @@ class CistemProtRefine2D(ProtClassify2D):
         argsStr = self._getRefineArgs()
 
         percUsed = self.numberOfClassAvg.get() * 300.0
-        percUsed = percUsed / self._getPtclsNumber()  * 100.0
+        percUsed = percUsed / self._getPtclsNumber() * 100.0
         if percUsed > 100.0:
             percUsed = 100.0
 

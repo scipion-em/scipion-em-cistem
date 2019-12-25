@@ -113,9 +113,9 @@ class TestCtffind4(TestBase):
 
         valuesList = [[24067, 23587, 58], [22373, 22039, 66], [22653, 22480, 5]]
         for ctfModel, values in zip(protCTF.outputCTF, valuesList):
-            self.assertAlmostEquals(ctfModel.getDefocusU(),values[0], delta=1000)
-            self.assertAlmostEquals(ctfModel.getDefocusV(),values[1], delta=1000)
-            self.assertAlmostEquals(ctfModel.getDefocusAngle(),values[2], delta=10)
+            self.assertAlmostEquals(ctfModel.getDefocusU(), values[0], delta=1000)
+            self.assertAlmostEquals(ctfModel.getDefocusV(), values[1], delta=1000)
+            self.assertAlmostEquals(ctfModel.getDefocusAngle(), values[2], delta=10)
 
 
 class TestFindParticles(TestBase):

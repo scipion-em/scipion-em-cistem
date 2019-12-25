@@ -33,7 +33,6 @@ from pwem.protocols import ProtInitialVolume
 from ..convert import *
 
 
-
 class CistemProtAbInitio(ProtInitialVolume):
     """ Protocol to run ab-initio reconstruction in cisTEM. """
     _label = 'ab-initio'
@@ -198,6 +197,7 @@ class CistemProtAbInitio(ProtInitialVolume):
         return ['Grigorieff2016']
 
     # -------------------------- UTILS functions ------------------------------
+
 
 '''
 number_of_starts_to_run=2

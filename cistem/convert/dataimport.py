@@ -31,7 +31,7 @@ from pwem.objects import CTFModel
 from .convert import readCtfModel
 
 
-class GrigorieffLabImportCTF():
+class GrigorieffLabImportCTF:
     """ Import CTF estimated with CTFFIND4. """
     def __init__(self, protocol):
         self.protocol = protocol

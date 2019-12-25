@@ -30,7 +30,7 @@ CISTEM_HOME = 'CISTEM_HOME'
 # Supported versions
 V1_0_0 = '1.0.0'
 
-#------------------ Constants values ------------------------------------------
+# ------------------ Constants values -----------------------------------------
 
 CTFFIND4_HOME = 'CTFFIND4_HOME'
 CTFFIND4_BIN = 'ctffind'

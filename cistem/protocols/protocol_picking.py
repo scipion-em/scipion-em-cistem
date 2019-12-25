@@ -288,7 +288,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
     # --------------------------- INFO functions --------------------------------
     def _summary(self):
-        summary = []
+        summary = list()
         summary.append("Number of input micrographs: %d"
                        % self.getInputMicrographs().getSize())
         if self.getOutputsSize() > 0:
@@ -379,7 +379,7 @@ NO
 %(bgBoxes)d
 %(ptclWhite)s
 eof"""
-        else: # ref-based picking
+        else:  # ref-based picking
             argsStr += """
 YES
 %(refsFn)s

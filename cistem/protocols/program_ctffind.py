@@ -97,7 +97,7 @@ class ProgramCtffind:
                              help='The CTF model will be fit to regions '
                                   'of the amplitude spectrum corresponding '
                                   'to this range of resolution.')
-        line.addParam('lowRes', params.FloatParam, default=30., label='Min' )
+        line.addParam('lowRes', params.FloatParam, default=30., label='Min')
         line.addParam('highRes', params.FloatParam, default=5., label='Max')
 
         line = group.addLine('Defocus search range (A)',

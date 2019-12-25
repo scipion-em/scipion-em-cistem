@@ -94,9 +94,9 @@ def readShiftsMovieAlignment(shiftFn):
     yshifts = []
 
     for line in f:
-        l = line.strip()
-        if l.startswith('image #'):
-            parts = l.split()
+        line2 = line.strip()
+        if line2.startswith('image #'):
+            parts = line2.split()
             xshifts.append(float(parts[-2].rstrip(',')))
             yshifts.append(float(parts[-1]))
     f.close()

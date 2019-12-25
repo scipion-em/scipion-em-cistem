@@ -38,7 +38,7 @@ from math import ceil
 from threading import Thread
 
 import pyworkflow.utils as pwutils
-from pwem.objects import MovieAlignment
+from pwem.objects import MovieAlignment, Image
 from pyworkflow.protocol import STEPS_PARALLEL
 from pwem.protocols import ProtAlignMovies
 import pyworkflow.protocol.params as params
@@ -194,7 +194,7 @@ class CistemProtUnblur(ProtAlignMovies):
 
         form.addParallelSection(threads=1, mpi=1)
 
-    #--------------------------- STEPS functions -------------------------------
+    # --------------------------- STEPS functions -----------------------------
 
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
@@ -228,7 +228,7 @@ class CistemProtUnblur(ProtAlignMovies):
                                       roi=roi, dark=inputMovies.getDark(),
                                       gain=inputMovies.getGain())
 
-                    self.computePSDs(movie, aveMicFn, outMicFn,
+                    self.computePSDImages(movie, aveMicFn, outMicFn,
                                      outputFnCorrected=self._getPsdJpeg(movie))
 
                 self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
@@ -292,7 +292,7 @@ class CistemProtUnblur(ProtAlignMovies):
 
         return errors
 
-    #--------------------------- UTILS functions -------------------------------
+    # --------------------------- UTILS functions -----------------------------
     def _getProgram(self):
         return Plugin.getProgram(UNBLUR_BIN)
 
@@ -434,12 +434,12 @@ eof\n
         return self.doComputeMicThumbnail.get()
 
     def _preprocessOutputMicrograph(self, mic, movie):
-        mic.plotGlobal = em.Image(location=self._getPlotGlobal(movie))
+        mic.plotGlobal = Image(location=self._getPlotGlobal(movie))
         if self.doComputePSD:
-            mic.psdCorr = em.Image(location=self._getPsdCorr(movie))
-            mic.psdJpeg = em.Image(location=self._getPsdJpeg(movie))
+            mic.psdCorr = Image(location=self._getPsdCorr(movie))
+            mic.psdJpeg = Image(location=self._getPsdJpeg(movie))
         if self._doComputeMicThumbnail():
-            mic.thumbnail = em.Image(
+            mic.thumbnail = Image(
                 location=self._getOutputMicThumbnail(movie))
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
@@ -524,7 +524,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     ax_px.plot(sumMeanX, sumMeanY, color='b')
     ax_px.plot(sumMeanX, sumMeanY, 'yo')
     ax_px.plot(sumMeanX[0], sumMeanY[0], 'ro', markersize=10, linewidth=0.5)
-    #ax_ang2.set_title('Full-frame alignment')
+    # ax_ang2.set_title('Full-frame alignment')
 
     plotter.tightLayout()
 
