@@ -248,6 +248,21 @@ class CistemProtUnblur(ProtAlignMovies):
         except:
             print("ERROR: Failed to align movie %s\n" % movie.getFileName())
 
+    # FIXME: Patch for Scipion2. For Scipion 3 this should be in the parent class and this can be removed
+    def createOutputStep(self):
+        # validate that we have some output movies
+        for outName, out in self.iterOutputAttributes():
+            output = out
+            break
+
+        if output.getSize() == 0 and len(self.listOfMovies) != 0:
+            raise Exception(pwutils.redStr("All movies failed, didn't create outputMicrographs."
+                                   "Please review movie processing steps above."))
+        elif output.getSize() < len(self.listOfMovies):
+            self.warning(pwutils.yellowStr("WARNING - Failed to align %d movies."
+                                           % (len(self.listOfMovies) - output.getSize())))
+
+
     def _insertFinalSteps(self, deps):
         stepId = self._insertFunctionStep('waitForThreadStep',
                                           prerequisites=deps)
