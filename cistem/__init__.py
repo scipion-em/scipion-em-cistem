@@ -73,8 +73,13 @@ class Plugin(pyworkflow.em.Plugin):
                            '&id=37&force=0&s3fs=1"',
                        default=True)
 
-        env.addPackage('ctffind4', version='4.1.13',
-                       tar='ctffind4-4.1.13.tgz')
+        try:
+            # If grigorieff lab is installed we do not define again ctfind4-4.1.13
+            import grigoriefflab
+
+        except Exception as e:
+            env.addPackage('ctffind4', version='4.1.13',
+                           tar='ctffind4-4.1.13.tgz')
 
 
 pyworkflow.em.Domain.registerPlugin(__name__)
