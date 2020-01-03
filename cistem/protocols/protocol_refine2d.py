@@ -42,7 +42,6 @@ from pwem.protocols import ProtClassify2D
 from cistem import Plugin
 from ..convert import (writeReferences, geometryFromMatrix,
                        rowToAlignment, HEADER_COLUMNS)
-from ..constants import *
 
 
 class CistemProtRefine2D(ProtClassify2D):
@@ -660,9 +659,9 @@ eof
                     raise Exception("Error: file %s does not exist" % parFn)
                 f2 = open(parFn)
 
-                for l in f2:
-                    if not l.startswith('C'):
-                        f1.write(l)
+                for line in f2:
+                    if not line.startswith('C'):
+                        f1.write(line)
                 f2.close()
                 cleanPattern(parFn)
             f1.close()

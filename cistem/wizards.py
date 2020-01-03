@@ -48,7 +48,7 @@ class BrandeisCTFWizard(CtfWizard):
         _objs = self._getParameters(protocol)['input']
         return CtfWizard._getListProvider(self, _objs)
         
-    def show(self, form):
+    def show(self, form, *args):
         protocol = form.protocol
         params = self._getParameters(protocol)
         _value = params['value']
@@ -74,5 +74,5 @@ class BrandeisCTFWizard(CtfWizard):
                                form.root)
     
     @classmethod    
-    def getView(self):
+    def getView(cls):
         return "wiz_ctf"

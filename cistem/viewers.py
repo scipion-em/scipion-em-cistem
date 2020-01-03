@@ -23,9 +23,10 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+from io import open
 
 from pyworkflow.utils import removeExt
-from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, Viewer
 from pwem.viewers import CtfView, EmPlotter, MicrographsView
 import pwem.viewers.showj as showj
 from pyworkflow.gui.project import ProjectWindow
@@ -41,10 +42,10 @@ def createCtfPlot(ctfSet, ctfId):
     xplotter = EmPlotter(x=gridsize[0], y=gridsize[1],
                          windowTitle='CTF Fitting')
     plot_title = "CTF Fitting"
-    a = xplotter.createSubPlot(plot_title, 'pixels^-1', 'CTF',
+    a = xplotter.createSubPlot(plot_title, 'Angstroms^-1', 'CTF',
                                yformat=False)
     
-    legendName = ['rotational avg. No Astg',
+    legendName = ['rotational avg. no astg',
                   'rotational avg.',
                   'CTF Fit',
                   'Cross Correlation',
@@ -118,17 +119,17 @@ class ProtUnblurViewer(Viewer):
         outputLabels = ['outputMicrographs', 'outputMicrographsDoseWeighted',
                         'outputMovies']
 
-        if not any(obj.hasAttribute(l) for l in outputLabels):
+        if not any(obj.hasAttribute(label) for label in outputLabels):
             return [self.infoMessage("Output (micrographs or movies) have "
                                      "not been produced yet.")]
 
         # Display only the first available output, showing all of them
         # can be confusing and not useful.
         # The user can still double-click in the specific output
-        for l in outputLabels:
-            if obj.hasAttribute(l):
-                output = getattr(obj, l)
-                if 'Micrographs' in l:
+        for label in outputLabels:
+            if obj.hasAttribute(label):
+                output = getattr(obj, label)
+                if 'Micrographs' in label:
                     return [MicrographsView(self.getProject(), output)]
                 else:  # Movies case
                     return [self.objectView(output, viewParams=viewParamsDef)]

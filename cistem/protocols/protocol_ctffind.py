@@ -30,12 +30,11 @@
 
 import os
 
-import pyworkflow as pw
+import pyworkflow.utils as pwutils
 from pwem.protocols import ProtCTFMicrographs
 from pwem.objects import CTFModel
 from pwem.convert import ImageHandler, DT_FLOAT
 
-from ..constants import *
 from .program_ctffind import ProgramCtffind
 
 
@@ -62,8 +61,8 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         micFn = mic.getFileName()
         micDir = self._getTmpPath('mic_%06d' % mic.getObjId())
         # Create micrograph dir
-        pw.utils.makePath(micDir)
-        micFnMrc = os.path.join(micDir, pw.utils.replaceBaseExt(micFn, 'mrc'))
+        pwutils.makePath(micDir)
+        micFnMrc = os.path.join(micDir, pwutils.replaceBaseExt(micFn, 'mrc'))
 
         ih = ImageHandler()
 
@@ -80,7 +79,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
                 **kwargs)
             self.runJob(program, args)
 
-            pw.utils.cleanPath(micDir)
+            pwutils.cleanPath(micDir)
 
         except Exception as ex:
             print("ERROR: Ctffind has failed for %s" % micFnMrc)
@@ -146,7 +145,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     def _getMicExtra(self, mic, suffix):
         """ Return a file in extra direction with root of micFn. """
-        return self._getExtraPath(pw.utils.removeBaseExt(os.path.basename(
+        return self._getExtraPath(pwutils.removeBaseExt(os.path.basename(
             mic.getFileName())) + '_' + suffix)
 
     def _getPsdPath(self, mic):

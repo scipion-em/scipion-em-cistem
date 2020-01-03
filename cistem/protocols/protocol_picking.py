@@ -231,11 +231,11 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             writeReferences(self.getInputReferences(),
                             self._getExtraPath('references.mrc'))
 
-    def _pickMicrograph(self, mic, args):
-        self._pickMicrographStep([mic], args)
+    def _pickMicrograph(self, mic, *args):
+        self._pickMicrographStep([mic], *args)
 
-    def _pickMicrographList(self, micList, args):
-        self._pickMicrographStep(micList, args)
+    def _pickMicrographList(self, micList, *args):
+        self._pickMicrographStep(micList, *args)
 
     def _pickMicrographStep(self, mics, args):
         for mic in mics:

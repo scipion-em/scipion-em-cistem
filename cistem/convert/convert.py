@@ -28,7 +28,7 @@ import os
 import numpy as np
 try:
     from itertools import izip
-except:
+except ImportError:
     izip = zip
 
 from pwem.objects import Coordinate, SetOfClasses2D, SetOfAverages, Transform
@@ -169,8 +169,8 @@ def writeReferences(inputSet, outputFn):
     """
     ih = ImageHandler()
 
-    def _convert(item, i):
-        index = i + 1
+    def _convert(item, n):
+        index = n + 1
         ih.convert(item, (index, outputFn))
         item.setLocation(index, outputFn)
 

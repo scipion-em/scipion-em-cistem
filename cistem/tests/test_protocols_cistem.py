@@ -29,7 +29,6 @@
 from pyworkflow.tests import *
 from pwem.protocols import ProtImportMicrographs, ProtImportParticles
 
-from cistem import *
 from ..protocols import (CistemProtCTFFind, CistemProtFindParticles,
                          CistemProtRefine2D)
 

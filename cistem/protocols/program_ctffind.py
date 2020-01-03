@@ -176,9 +176,9 @@ class ProgramCtffind:
         The input keywords argument should contain key-values for
         one micrograph or group of micrographs.
         """
-        params = dict(self._params)
-        params.update(kwargs)
-        return self._program, self._args % params
+        paramDict = dict(self._params)
+        paramDict.update(kwargs)
+        return self._program, self._args % paramDict
 
     def parseOutput(self, filename):
         """ Retrieve defocus U, V and angle from the
@@ -199,26 +199,26 @@ class ProgramCtffind:
 
     def _getArgs(self, protocol):
         # Update first the params dict
-        params = protocol.getCtfParamsDict()
-        if params['lowRes'] > 50:
-            params['lowRes'] = 50
-        params['step_focus'] = protocol.stepDefocus.get()
-        params['fixAstig'] = "yes" if protocol.fixAstig else "no"
-        params['astigmatism'] = protocol.astigmatism.get()
-        params['lowRes'] = protocol.lowRes.get()
-        params['highRes'] = protocol.highRes.get()
-        params['minDefocus'] = protocol.minDefocus.get()
-        params['maxDefocus'] = protocol.maxDefocus.get()
+        paramDict = protocol.getCtfParamsDict()
+        if paramDict['lowRes'] > 50:
+            paramDict['lowRes'] = 50
+        paramDict['step_focus'] = protocol.stepDefocus.get()
+        paramDict['fixAstig'] = "yes" if protocol.fixAstig else "no"
+        paramDict['astigmatism'] = protocol.astigmatism.get()
+        paramDict['lowRes'] = protocol.lowRes.get()
+        paramDict['highRes'] = protocol.highRes.get()
+        paramDict['minDefocus'] = protocol.minDefocus.get()
+        paramDict['maxDefocus'] = protocol.maxDefocus.get()
 
         if self._findPhaseShift:
-            params['phaseShift'] = "yes"
-            params['minPhaseShift'] = deg2rad(protocol.minPhaseShift.get())
-            params['maxPhaseShift'] = deg2rad(protocol.maxPhaseShift.get())
-            params['stepPhaseShift'] = deg2rad(protocol.stepPhaseShift.get())
+            paramDict['phaseShift'] = "yes"
+            paramDict['minPhaseShift'] = deg2rad(protocol.minPhaseShift.get())
+            paramDict['maxPhaseShift'] = deg2rad(protocol.maxPhaseShift.get())
+            paramDict['stepPhaseShift'] = deg2rad(protocol.stepPhaseShift.get())
         else:
-            params['phaseShift'] = "no"
+            paramDict['phaseShift'] = "no"
 
-        params['slowSearch'] = "yes" if protocol.slowSearch else "no"
+        paramDict['slowSearch'] = "yes" if protocol.slowSearch else "no"
 
         args = """   << eof > %(ctffindOut)s
 %(micFn)s
@@ -252,4 +252,4 @@ eof\n
                                 '%(minPhaseShift)f\n'
                                 '%(maxPhaseShift)f\n'
                                 '%(stepPhaseShift)f')
-        return args, params
+        return args, paramDict

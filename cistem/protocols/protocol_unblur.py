@@ -32,7 +32,7 @@ import os
 import time
 try:
     from itertools import izip
-except:
+except ImportError:
     izip = zip
 from math import ceil
 from threading import Thread
@@ -229,7 +229,7 @@ class CistemProtUnblur(ProtAlignMovies):
                                       gain=inputMovies.getGain())
 
                     self.computePSDImages(movie, aveMicFn, outMicFn,
-                                     outputFnCorrected=self._getPsdJpeg(movie))
+                                          outputFnCorrected=self._getPsdJpeg(movie))
 
                 self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
 
@@ -304,7 +304,7 @@ class CistemProtUnblur(ProtAlignMovies):
         else:
             preExp, dose = 0.0, 0.0
 
-        args = {'movieName': pwutils.basename(self._getMovieFn(movie)),
+        args = {'movieName': os.path.basename(self._getMovieFn(movie)),
                 'micFnName': self._getMicFn(movie),
                 'shiftsFn': self._getMovieLogFile(movie),
                 'samplingRate': self.samplingRate,
@@ -481,9 +481,9 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     sumMeanX = []
     sumMeanY = []
 
-    def px_to_ang(ax_px):
-        y1, y2 = ax_px.get_ylim()
-        x1, x2 = ax_px.get_xlim()
+    def px_to_ang(apx):
+        y1, y2 = apx.get_ylim()
+        x1, x2 = apx.get_xlim()
         ax_ang2.set_ylim(y1*pixSize, y2*pixSize)
         ax_ang.set_xlim(x1*pixSize, x2*pixSize)
         ax_ang.figure.canvas.draw()
