@@ -37,7 +37,7 @@ b) Developer's version
 
 cisTEM binaries will be installed automatically with the plugin, but you can also link an existing installation.
 
-    * Default installation path assumed is ``software/em/cistem-1.0.0``, if you want to change it, set *CISTEM_HOME* in ``scipion.conf`` file pointing to the folder where the cisTEM is installed.
+    * Default installation path assumed is ``software/em/cistem-1.0.0-beta``, if you want to change it, set *CISTEM_HOME* in ``scipion.conf`` file pointing to the folder where the cisTEM is installed.
     * It's possible to use CTFFIND4 installed separately from cisTEM by defining *CTFFIND4_HOME* variable in ``scipion.conf``.
 
 To check the installation, simply run one of the following Scipion tests:
@@ -48,14 +48,13 @@ To check the installation, simply run one of the following Scipion tests:
    scipion test cistem.tests.test_protocols_cistem.TestCtffind4
    scipion test cistem.tests.test_protocols_cistem.TestFindParticles
    scipion test cistem.tests.test_protocols_cistem.TestRefine2D
-   scipion test cistem.tests.test_protocols_cistem.TestAbInitio
 
 A complete list of tests can also be seen by executing ``scipion test --show --grep cistem``
 
 Supported versions
 ------------------
 
-1.0.0
+1.0.0-beta
 
 
 Protocols
@@ -65,7 +64,6 @@ Protocols
 * unblur
 * find particles
 * classify 2D
-* ab-initio
 
 References
 ----------
