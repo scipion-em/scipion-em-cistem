@@ -262,7 +262,6 @@ class CistemProtUnblur(ProtAlignMovies):
             self.warning(pwutils.yellowStr("WARNING - Failed to align %d movies."
                                            % (len(self.listOfMovies) - output.getSize())))
 
-
     def _insertFinalSteps(self, deps):
         stepId = self._insertFunctionStep('waitForThreadStep',
                                           prerequisites=deps)

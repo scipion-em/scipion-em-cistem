@@ -24,8 +24,10 @@
 # *
 # **************************************************************************
 
-from pyworkflow.utils import removeExt
-from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
+from pyworkflow.protocol.params import LabelParam
+from pyworkflow.utils import removeExt, cleanPath
+from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, ProtocolViewer
+from pyworkflow.em import SetOfMovies
 from pyworkflow.em.viewers import CtfView, EmPlotter, MicrographsView
 import pyworkflow.em.viewers.showj as showj
 from pyworkflow.gui.project import ProjectWindow
@@ -63,7 +65,7 @@ ProjectWindow.registerObjectCommand(OBJCMD_CTFFIND4, createCtfPlot)
 
 class CtffindViewer(Viewer):
     """ Specific way to visualize SetOfCtf. """
-    _environments = [DESKTOP_TKINTER, WEB_DJANGO]
+    _environments = [DESKTOP_TKINTER]
     _targets = [CistemProtCTFFind]
 
     def _visualize(self, prot, **kwargs):
@@ -84,6 +86,7 @@ def _plotCurve(a, i, fn):
     curv = _getValues(fn, i)
     a.plot(freqs, curv)
 
+
 def _getValues(fn, row):
     f = open(fn)
     values = []
@@ -98,38 +101,95 @@ def _getValues(fn, row):
     return values
 
 
-class ProtUnblurViewer(Viewer):
+class ProtUnblurViewer(ProtocolViewer):
     _targets = [CistemProtUnblur]
-    _environments = [DESKTOP_TKINTER, WEB_DJANGO]
+    _environments = [DESKTOP_TKINTER]
 
     _label = 'viewer unblur'
 
-    def _visualize(self, obj, **kwargs):
-        views = []
+    def _defineParams(self, form):
+        form.addSection(label='Visualization')
+        form.addParam('doShowMics', LabelParam,
+                      label="Show aligned micrographs?", default=True,
+                      help="Show the output aligned micrographs.")
+        form.addParam('doShowMicsDW', LabelParam,
+                      label="Show aligned DOSE-WEIGHTED micrographs?",
+                      default=True,
+                      help="Show the output aligned dose-weighted "
+                           "micrographs.")
+        form.addParam('doShowMovies', LabelParam,
+                      label="Show output movies?", default=True,
+                      help="Show the output movies with alignment "
+                           "information.")
+        form.addParam('doShowFailedMovies', LabelParam,
+                      label="Show FAILED movies?", default=True,
+                      help="Create a set of failed movies "
+                           "and display it.")
 
-        labelsDef = 'enabled id _filename'
+    def _getVisualizeDict(self):
+        self._errors = []
+        visualizeDict = {'doShowMics': self._viewParam,
+                         'doShowMicsDW': self._viewParam,
+                         'doShowMovies': self._viewParam,
+                         'doShowFailedMovies': self._viewParam
+                         }
+        return visualizeDict
+
+    def _viewParam(self, param=None):
+        labelsDef = 'enabled id _filename _samplingRate '
+        labelsDef += '_acquisition._dosePerFrame _acquisition._doseInitial '
         viewParamsDef = {showj.MODE: showj.MODE_MD,
                          showj.ORDER: labelsDef,
                          showj.VISIBLE: labelsDef,
                          showj.RENDER: None
                          }
+        if param == 'doShowMics':
+            if getattr(self.protocol, 'outputMicrographs', None) is not None:
+                return [MicrographsView(self.getProject(),
+                                        self.protocol.outputMicrographs)]
+            else:
+                return [self.errorMessage('No output micrographs found!',
+                                          title="Visualization error")]
 
-        outputLabels = ['outputMicrographs', 'outputMicrographsDoseWeighted',
-                        'outputMovies']
+        elif param == 'doShowMicsDW':
+            if getattr(self.protocol, 'outputMicrographsDoseWeighted', None) is not None:
+                return [MicrographsView(self.getProject(),
+                                        self.protocol.outputMicrographsDoseWeighted)]
+            else:
+                return [self.errorMessage('No output dose-weighted micrographs found!',
+                                          title="Visualization error")]
 
-        if not any(obj.hasAttribute(l) for l in outputLabels):
-            return [self.infoMessage("Output (micrographs or movies) have "
-                                     "not been produced yet.")]
+        elif param == 'doShowMovies':
+            if getattr(self.protocol, 'outputMovies', None) is not None:
+                output = self.protocol.outputMovies
+                return [self.objectView(output, viewParams=viewParamsDef)]
+            else:
+                return [self.errorMessage('No output movies found!',
+                                          title="Visualization error")]
 
-        # Display only the first available output, showing all of them
-        # can be confusing and not useful.
-        # The user can still double-click in the specific output
-        for l in outputLabels:
-            if obj.hasAttribute(l):
-                output = getattr(obj, l)
-                if 'Micrographs' in l:
-                    return [MicrographsView(self.getProject(), output)]
-                else:  # Movies case
-                    return [self.objectView(output, viewParams=viewParamsDef)]
+        elif param == 'doShowFailedMovies':
+            self.failedList = self.protocol._readFailedList()
+            if not self.failedList:
+                return [self.errorMessage('No failed movies found!',
+                                          title="Visualization error")]
+            else:
+                sqliteFn = self.protocol._getPath('movies_failed.sqlite')
+                self.createFailedMoviesSqlite(sqliteFn)
+                return [self.objectView(sqliteFn, viewParams=viewParamsDef)]
 
-        return views
+    def createFailedMoviesSqlite(self, path):
+        inputMovies = self.protocol.inputMovies.get()
+        cleanPath(path)
+        movieSet = SetOfMovies(filename=path)
+        movieSet.copyInfo(inputMovies)
+        movieSet.copyItems(inputMovies,
+                           updateItemCallback=self._findFailedMovies)
+
+        movieSet.write()
+        movieSet.close()
+
+        return movieSet
+
+    def _findFailedMovies(self, item, row):
+        if item.getObjId() not in self.failedList:
+            setattr(item, "_appendItem", False)
