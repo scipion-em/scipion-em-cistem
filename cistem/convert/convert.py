@@ -26,12 +26,15 @@
 
 import os
 import numpy as np
+from collections import OrderedDict
 try:
     from itertools import izip
 except ImportError:
     izip = zip
 
-from pwem.objects import Coordinate, SetOfClasses2D, SetOfAverages, Transform
+from pwem.objects import (Coordinate, SetOfClasses2D, SetOfAverages,
+                          Transform, CTFModel)
+from pwem.constants import ALIGN_PROJ
 from pwem.convert import ImageHandler
 import pwem.convert.transformations as transformations
 from pyworkflow.utils import replaceBaseExt, join, exists
@@ -40,6 +43,50 @@ from pyworkflow.utils import replaceBaseExt, join, exists
 HEADER_COLUMNS = ['INDEX', 'PSI', 'THETA', 'PHI', 'SHX', 'SHY', 'MAG',
                   'FILM', 'DF1', 'DF2', 'ANGAST', 'PSHIFT', 'OCC',
                   'LogP', 'SIGMA', 'SCORE', 'CHANGE']
+
+
+class FrealignParFile(object):
+    """ Handler class to read/write frealign metadata."""
+    def __init__(self, filename, mode='r'):
+        self._file = open(filename, mode)
+        self._count = 0
+
+    def __iter__(self):
+        for line in self._file:
+            line = line.strip()
+            if not line.startswith('C'):
+                row = OrderedDict(zip(HEADER_COLUMNS, line.split()))
+                yield row
+
+    def close(self):
+        self._file.close()
+
+
+def readSetOfParticles(inputSet, outputSet, parFileName):
+    """
+     Iterate through the inputSet and the parFile lines
+     and populate the outputSet with the same particles
+     of inputSet, but with the angles and shift (3d alignment)
+     updated from the parFile info.
+     It is assumed that the order of iteration of the particles
+     and the lines match and have the same number.
+    """
+    # create dictionary that matches input particles with param file
+    samplingRate = inputSet.getSamplingRate()
+    parFile = FrealignParFile(parFileName)
+    partIter = iter(inputSet.iterItems(orderBy=['_micId', 'id'], direction='ASC'))
+
+    for particle, row in izip(partIter, parFile):
+        particle.setTransform(rowToAlignment(row, samplingRate))
+        # We assume that each particle have ctfModel
+        # in order to be processed in Frealign
+        # JMRT: Since the CTF will be set, we can setup
+        # an empty CTFModel object
+        if not particle.hasCTF():
+            particle.setCTF(CTFModel())
+        rowToCtfModel(row, particle.getCTF())
+        outputSet.append(particle)
+    outputSet.setAlignment(ALIGN_PROJ)
 
 
 def rowToCtfModel(ctfRow, ctfModel):
