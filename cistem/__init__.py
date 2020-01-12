@@ -29,13 +29,6 @@ import os
 import pyworkflow.em
 import pyworkflow.utils as pwutils
 
-try:
-    oldplugin = pyworkflow.em.Domain.importFromPlugin('grigoriefflab', doRaise=False)
-    raise Exception('You cannot use cistem plugin AND grigoriefflab!\n'
-                    'Please remove the latter one!')
-except ImportError:
-    pass
-
 from .constants import *
 
 
