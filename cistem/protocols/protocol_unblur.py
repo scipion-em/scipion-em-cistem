@@ -42,10 +42,10 @@ from pyworkflow.em.protocol import ProtAlignMovies
 import pyworkflow.protocol.params as params
 from pyworkflow.gui.plotter import Plotter
 
-from cistem import Plugin
-from cistem.convert import (readShiftsMovieAlignment,
-                            writeShiftsMovieAlignment)
-from cistem.constants import UNBLUR_BIN
+from .. import Plugin
+from ..convert import (readShiftsMovieAlignment,
+                       writeShiftsMovieAlignment)
+from ..constants import UNBLUR_BIN
 
 
 class CistemProtUnblur(ProtAlignMovies):

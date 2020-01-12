@@ -29,9 +29,9 @@
 from pyworkflow.em import *
 from pyworkflow.tests import *
 
-from cistem import *
-from cistem.protocols import (CistemProtCTFFind, CistemProtFindParticles,
-                              CistemProtRefine2D)
+from .. import *
+from ..protocols import (CistemProtCTFFind, CistemProtFindParticles,
+                         CistemProtRefine2D)
 
 
 class TestBase(BaseTest):

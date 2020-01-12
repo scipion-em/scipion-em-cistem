@@ -34,9 +34,9 @@ from pyworkflow.em.convert import ImageHandler
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
 
-from cistem import Plugin
-from cistem.convert import readSetOfCoordinates, writeReferences
-from cistem.constants import *
+from .. import Plugin
+from ..convert import readSetOfCoordinates, writeReferences
+from ..constants import *
 
 
 class CistemProtFindParticles(ProtParticlePickingAuto):

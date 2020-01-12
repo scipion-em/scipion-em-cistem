@@ -38,10 +38,10 @@ from pyworkflow.utils.path import (makePath, createLink,
                                    cleanPattern, moveFile,
                                    exists)
 
-from cistem import Plugin
-from cistem.convert import (writeReferences, geometryFromMatrix,
-                            rowToAlignment, HEADER_COLUMNS)
-from cistem.constants import *
+from .. import Plugin
+from ..convert import (writeReferences, geometryFromMatrix,
+                       rowToAlignment, HEADER_COLUMNS)
+from ..constants import *
 
 
 class CistemProtRefine2D(em.ProtClassify2D):
@@ -344,7 +344,7 @@ class CistemProtRefine2D(em.ProtClassify2D):
         argsStr = self._getRefineArgs()
 
         percUsed = self.numberOfClassAvg.get() * 300.0
-        percUsed = percUsed / self._getPtclsNumber()  * 100.0
+        percUsed = percUsed / self._getPtclsNumber() * 100.0
         if percUsed > 100.0:
             percUsed = 100.0
 

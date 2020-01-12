@@ -32,7 +32,7 @@ import os
 
 import pyworkflow as pw
 
-from cistem.constants import *
+from ..constants import *
 from .program_ctffind import ProgramCtffind
 
 

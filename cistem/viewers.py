@@ -32,7 +32,7 @@ from pyworkflow.em.viewers import CtfView, EmPlotter, MicrographsView
 import pyworkflow.em.viewers.showj as showj
 from pyworkflow.gui.project import ProjectWindow
 
-from cistem.protocols import CistemProtCTFFind, CistemProtUnblur
+from .protocols import CistemProtCTFFind, CistemProtUnblur
 
 
 def createCtfPlot(ctfSet, ctfId):

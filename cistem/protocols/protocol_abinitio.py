@@ -29,8 +29,7 @@ import pyworkflow.em as em
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         IntParam, StringParam,
                                         BooleanParam)
-import cistem
-from cistem.convert import *
+from ..convert import *
 
 
 

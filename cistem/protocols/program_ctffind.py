@@ -2,7 +2,6 @@
 # *
 # * Authors:     Josue Gomez BLanco (josue.gomez-blanco@mcgill.ca) [1]
 # *              J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [2]
-
 # *
 # * [1] Department of Anatomy and Cell Biology, McGill University
 # * [2] SciLifeLab, Stockholm University
@@ -32,8 +31,8 @@ from numpy import deg2rad
 import pyworkflow.em as pwem
 import pyworkflow.protocol.params as params
 
-from cistem import Plugin
-from cistem.constants import CTFFIND4_BIN
+from .. import Plugin
+from ..constants import CTFFIND4_BIN
 import cistem.convert as convert
 
 

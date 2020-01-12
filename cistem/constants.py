@@ -28,7 +28,7 @@
 CISTEM_HOME = 'CISTEM_HOME'
 
 # Supported versions
-V1_0_0 = '1.0.0'
+V1_0_0 = '1.0.0-beta'
 
 #------------------ Constants values ------------------------------------------
 

@@ -28,8 +28,8 @@
 from pyworkflow.em import *
 from pyworkflow.tests import *
 
-from cistem import *
-from cistem.protocols import CistemProtUnblur
+from .. import *
+from ..protocols import CistemProtUnblur
 
 
 

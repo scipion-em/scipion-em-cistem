@@ -29,6 +29,13 @@ import os
 import pyworkflow.em
 import pyworkflow.utils as pwutils
 
+try:
+    oldplugin = pyworkflow.em.Domain.importFromPlugin('grigoriefflab', doRaise=False)
+    raise Exception('You cannot use cistem plugin AND grigoriefflab!\n'
+                    'Please remove the latter one!')
+except ImportError:
+    pass
+
 from .constants import *
 
 
@@ -74,10 +81,10 @@ class Plugin(pyworkflow.em.Plugin):
                        default=True)
 
         try:
-            # If grigorieff lab is installed we do not define again ctfind4-4.1.13
+            # If grigoriefflab is installed we do not define again ctfind4-4.1.13
             import grigoriefflab
 
-        except Exception as e:
+        except ImportError:
             env.addPackage('ctffind4', version='4.1.13',
                            tar='ctffind4-4.1.13.tgz')
 
