@@ -80,6 +80,3 @@ class Plugin(pwem.Plugin):
         except Exception as e:
             env.addPackage('ctffind4', version='4.1.13',
                            tar='ctffind4-4.1.13.tgz')
-
-
-pwem.Domain.registerPlugin(__name__)

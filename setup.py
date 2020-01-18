@@ -199,4 +199,7 @@ setup(
         'Bug Reports': 'https://github.com/scipion-em/scipion-em-cistem/issues',
         'Source': 'https://github.com/scipion-em/scipion-em-cistem/',
     },
+    entry_points={
+        'pyworkflow.plugin': 'cistem = cistem'
+    },
 )
