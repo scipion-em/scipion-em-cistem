@@ -27,9 +27,9 @@ from io import open
 
 from pyworkflow.protocol.params import LabelParam
 from pyworkflow.utils import removeExt, cleanPath
-from pyworkflow.viewer import DESKTOP_TKINTER, Viewer, ProtocolViewer
+from pyworkflow.viewer import DESKTOP_TKINTER, Viewer
 from pyworkflow.gui.project import ProjectWindow
-from pwem.viewers import CtfView, EmPlotter, MicrographsView
+from pwem.viewers import CtfView, EmPlotter, MicrographsView, EmProtocolViewer
 import pwem.viewers.showj as showj
 from pwem.objects import SetOfMovies
 
@@ -102,7 +102,7 @@ def _getValues(fn, row):
     return values
 
 
-class ProtUnblurViewer(ProtocolViewer):
+class ProtUnblurViewer(EmProtocolViewer):
     _targets = [CistemProtUnblur]
     _environments = [DESKTOP_TKINTER]
 
