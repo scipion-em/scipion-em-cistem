@@ -30,7 +30,7 @@ from pwem.constants import UNIT_ANGSTROM
 from .protocols import CistemProtCTFFind
 
 
-class BrandeisCTFWizard(CtfWizard):
+class CistemCTFWizard(CtfWizard):
     _targets = [(CistemProtCTFFind, ['lowRes', 'highRes'])]
     
     def _getParameters(self, protocol):

@@ -126,7 +126,12 @@ class TestFindParticles(TestBase):
         cls.protCtfRun = cls.runCtffind(cls.protImport.outputMicrographs)
 
     def testFindParts(self):
-        protPick = CistemProtFindParticles()
+        protPick = self.newProtocol(CistemProtFindParticles,
+                                    maxradius=300.,
+                                    radius=300.,
+                                    threshold=3.0,
+                                    ptclWhite=True,  # wrong but it works!
+                                    minDist=250)
         protPick.inputMicrographs.set(self.protImport.outputMicrographs)
         protPick.ctfRelations.set(self.protCtfRun.outputCTF)
 
