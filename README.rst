@@ -2,7 +2,7 @@
 cisTEM plugin
 =============
 
-**ATTENTION: This plugin is still in development and will eventually replace grigoriefflab plugin.**
+**ATTENTION: This plugin replaces grigoriefflab plugin. You cannot use both of them simultaneously.**
 
 This plugin provide wrappers around several programs of `cisTEM <https://cistem.org>`_ software suite.
 
@@ -13,7 +13,7 @@ This plugin provide wrappers around several programs of `cisTEM <https://cistem.
 Installation
 ------------
 
-You will need to use `2.0 <https://github.com/I2PC/scipion/releases/tag/V2.0.0>`_ version of Scipion to be able to run these protocols. To install the plugin, you have two options:
+You will need to use `3.0 <https://github.com/I2PC/scipion/releases/tag/V3.0.0>`_ version of Scipion to be able to run these protocols. To install the plugin, you have two options:
 
 a) Stable version
 
@@ -44,10 +44,10 @@ To check the installation, simply run one of the following Scipion tests:
 
 .. code-block::
 
-   scipion test cistem.tests.test_protocols_cistem_movies.TestUnblur
-   scipion test cistem.tests.test_protocols_cistem.TestCtffind4
-   scipion test cistem.tests.test_protocols_cistem.TestFindParticles
-   scipion test cistem.tests.test_protocols_cistem.TestRefine2D
+   scipion tests cistem.tests.test_protocols_cistem_movies.TestUnblur
+   scipion tests cistem.tests.test_protocols_cistem.TestCtffind4
+   scipion tests cistem.tests.test_protocols_cistem.TestFindParticles
+   scipion tests cistem.tests.test_protocols_cistem.TestRefine2D
 
 A complete list of tests can also be seen by executing ``scipion test --show --grep cistem``
 
