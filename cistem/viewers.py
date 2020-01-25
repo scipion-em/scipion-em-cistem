@@ -42,24 +42,42 @@ def createCtfPlot(ctfSet, ctfId):
     fn = removeExt(psdFn) + "_avrot.txt"
     gridsize = [1, 1]
     xplotter = EmPlotter(x=gridsize[0], y=gridsize[1],
-                         windowTitle='CTF Fitting')
-    plot_title = "CTF Fitting"
-    a = xplotter.createSubPlot(plot_title, 'Angstroms^-1', 'CTF',
+                         windowTitle='CTFFind results')
+    plot_title = getPlotSubtitle(ctfModel)
+    a = xplotter.createSubPlot(plot_title, 'Spacial frequency (1/A)',
+                               'Amplitude (or cross-correlation)',
                                yformat=False)
     
-    legendName = ['rotational avg. no astg',
-                  'rotational avg.',
+    legendName = ['Amplitude spectrum',
                   'CTF Fit',
-                  'Cross Correlation',
-                  '2sigma cross correlation of noise']
-    for i in range(1, 6):
+                  'Quality of fit']
+    for i in [2, 3, 4]:
         _plotCurve(a, i, fn)
     xplotter.showLegend(legendName)
     a.grid(True)
     xplotter.show()
 
 
-OBJCMD_CTFFIND4 = "Display Ctf Fitting"
+def getPlotSubtitle(ctf):
+    ang = u"\u212B"
+    deg = u"\u00b0"
+    def1, def2, angle = ctf.getDefocus()
+    phSh = ctf.getPhaseShift()
+    score = ctf.getFitQuality()
+    res = ctf.getResolution()
+
+    title = "Def1: %d %s | Def2: %d %s | Angle: %0.1f%s | " % (
+        def1, ang, def2, ang, angle, deg)
+
+    if phSh is not None:
+        title += "Phase shift: %0.2f %s | " % (phSh, deg)
+
+    title += "Fit: %0.1f %s | Score: %0.3f" % (res, ang, score)
+
+    return title
+
+
+OBJCMD_CTFFIND4 = "CTFFind plot results"
 
 ProjectWindow.registerObjectCommand(OBJCMD_CTFFIND4, createCtfPlot)
 
@@ -86,6 +104,7 @@ def _plotCurve(a, i, fn):
     freqs = _getValues(fn, 0)
     curv = _getValues(fn, i)
     a.plot(freqs, curv)
+    a.set_ylim([-0.1, 1.1])
 
 
 def _getValues(fn, row):
