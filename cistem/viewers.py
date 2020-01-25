@@ -40,9 +40,7 @@ def createCtfPlot(ctfSet, ctfId):
     ctfModel = ctfSet[ctfId]
     psdFn = ctfModel.getPsdFile()
     fn = removeExt(psdFn) + "_avrot.txt"
-    gridsize = [1, 1]
-    xplotter = EmPlotter(x=gridsize[0], y=gridsize[1],
-                         windowTitle='CTFFind results')
+    xplotter = EmPlotter(windowTitle='CTFFind results')
     plot_title = getPlotSubtitle(ctfModel)
     a = xplotter.createSubPlot(plot_title, 'Spacial frequency (1/A)',
                                'Amplitude (or cross-correlation)',
@@ -53,7 +51,8 @@ def createCtfPlot(ctfSet, ctfId):
                   'Quality of fit']
     for i in [2, 3, 4]:
         _plotCurve(a, i, fn)
-    xplotter.showLegend(legendName)
+    xplotter.showLegend(legendName, loc='upper right')
+    a.set_ylim([-0.1, 1.1])
     a.grid(True)
     xplotter.show()
 
@@ -77,6 +76,27 @@ def getPlotSubtitle(ctf):
     return title
 
 
+def _plotCurve(a, i, fn):
+    freqs = _getValues(fn, 0)
+    curv = _getValues(fn, i)
+    a.plot(freqs, curv)
+
+
+def _getValues(fn, row):
+    f = open(fn)
+    values = []
+    i = 0
+    for line in f:
+        line = line.strip()
+        if not line.startswith("#"):
+            if i == row:
+                values = map(float, line.split())
+                break
+            i += 1
+    f.close()
+    return list(values)
+
+
 OBJCMD_CTFFIND4 = "CTFFind plot results"
 
 ProjectWindow.registerObjectCommand(OBJCMD_CTFFIND4, createCtfPlot)
@@ -98,27 +118,6 @@ class CtffindViewer(Viewer):
         else:
             return [self.infoMessage("The output SetOfCTFs has not been "
                                      "produced", "Missing output")]
-
-
-def _plotCurve(a, i, fn):
-    freqs = _getValues(fn, 0)
-    curv = _getValues(fn, i)
-    a.plot(freqs, curv)
-    a.set_ylim([-0.1, 1.1])
-
-
-def _getValues(fn, row):
-    f = open(fn)
-    values = []
-    i = 0
-    for line in f:
-        if not line.startswith("#"):
-            if i == row:
-                values = line.split()
-                break
-            i += 1
-    f.close()
-    return values
 
 
 class ProtUnblurViewer(EmProtocolViewer):

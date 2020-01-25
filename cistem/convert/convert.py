@@ -109,6 +109,8 @@ def parseCtffind4Output(filename):
                 # Stop reading. In ctffind4-4.0.15 there are extra lines
                 break
         f.close()
+    else:
+        print("Warning: Missing file: ", filename)
     return result
 
 
