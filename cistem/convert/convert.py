@@ -27,15 +27,10 @@
 import os
 import numpy as np
 from collections import OrderedDict
-try:
-    from itertools import izip
-except ImportError:
-    izip = zip
-
 from pwem.objects import (Coordinate, SetOfClasses2D, SetOfAverages,
                           Transform, CTFModel)
 from pwem.constants import ALIGN_PROJ
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 import pwem.convert.transformations as transformations
 from pyworkflow.utils import replaceBaseExt, join, exists
 
@@ -76,7 +71,7 @@ def readSetOfParticles(inputSet, outputSet, parFileName):
     parFile = FrealignParFile(parFileName)
     partIter = iter(inputSet.iterItems(orderBy=['_micId', 'id'], direction='ASC'))
 
-    for particle, row in izip(partIter, parFile):
+    for particle, row in zip(partIter, parFile):
         particle.setTransform(rowToAlignment(row, samplingRate))
         # We assume that each particle have ctfModel
         # in order to be processed in Frealign
@@ -174,7 +169,7 @@ def writeShiftsMovieAlignment(movie, shiftsFn, s0, sN):
 
     shiftsX = ""
     shiftsY = ""
-    for shiftX, shiftY in izip(shiftListX, shiftListY):
+    for shiftX, shiftY in zip(shiftListX, shiftListY):
         if s0 <= alFrame <= sN:
             shiftsX = shiftsX + "%0.4f " % shiftX
             shiftsY = shiftsY + "%0.4f " % shiftY

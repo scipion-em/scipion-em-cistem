@@ -33,7 +33,7 @@ import os
 import pyworkflow.utils as pwutils
 from pwem.protocols import ProtCTFMicrographs
 from pwem.objects import CTFModel
-from pwem.convert import ImageHandler, DT_FLOAT
+from pwem import emlib
 
 from .program_ctffind import ProgramCtffind
 
@@ -64,12 +64,12 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         pwutils.makePath(micDir)
         micFnMrc = os.path.join(micDir, pwutils.replaceBaseExt(micFn, 'mrc'))
 
-        ih = ImageHandler()
+        ih = emlib.image.ImageHandler()
 
         if not ih.existsLocation(micFn):
             raise Exception("Missing input micrograph: %s" % micFn)
 
-        ih.convert(micFn, micFnMrc, DT_FLOAT)
+        ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
 
         try:
             program, args = self._ctfProgram.getCommand(
