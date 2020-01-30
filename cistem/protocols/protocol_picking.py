@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
 from pwem.constants import RELATION_CTF
 from pwem.protocols import ProtParticlePickingAuto
-from pwem.convert import ImageHandler
+from pwem import emlib
 
 from cistem import Plugin
 from ..convert import readSetOfCoordinates, writeReferences
@@ -216,7 +216,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             for ctf in self.ctfRelations.get():
                 self.ctfDict[ctf.getMicrograph().getMicName()] = ctf.clone()
 
-        ih = ImageHandler()
+        ih = emlib.image.ImageHandler()
         for mic in self.getInputMicrographs():
             micName = mic.getFileName()
             # We convert the input micrographs if they are not .mrc
