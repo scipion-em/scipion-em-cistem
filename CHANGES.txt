@@ -1,4 +1,4 @@
-2.0.0:
+1.1.0:
     - First Scipion 3 / python 3 version.
     - Added continue mode to refine2d
     - Fixed picking test
@@ -6,4 +6,3 @@
     - Added viewer for unblur
     - Added import particles from Frealign to keep compatibility
 1.0.0 - First plugin version
-
