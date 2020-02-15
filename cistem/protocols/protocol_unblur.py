@@ -30,10 +30,6 @@
 
 import os
 import time
-try:
-    from itertools import izip
-except ImportError:
-    izip = zip
 from math import ceil
 from threading import Thread
 
@@ -521,7 +517,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     skipLabels = ceil(len(meanX)/10.0)
     labelTick = 1
 
-    for x, y in izip(meanX, meanY):
+    for x, y in zip(meanX, meanY):
         sumMeanX.append(x)
         sumMeanY.append(y)
         if labelTick == 1:
