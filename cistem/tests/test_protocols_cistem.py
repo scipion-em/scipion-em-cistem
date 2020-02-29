@@ -28,6 +28,7 @@
 
 from pyworkflow.tests import *
 from pwem.protocols import ProtImportMicrographs, ProtImportParticles
+from pyworkflow.utils import magentaStr
 
 from ..protocols import (CistemProtCTFFind, CistemProtFindParticles,
                          CistemProtRefine2D)
@@ -52,11 +53,8 @@ class TestBase(BaseTest):
 
         cls.protImport = ProtImportMicrographs(**kwargs)
         cls.launchProtocol(cls.protImport)
-
-        # Check that input micrographs have been imported
-        if cls.protImport.outputMicrographs is None:
-            raise Exception('Import of micrograph: %s, failed. '
-                            'outputMicrographs is None.' % pattern)
+        cls.assertIsNotNone(cls.protImport.outputMicrographs,
+                            "SetOfMicrographs has not been produced.")
 
         return cls.protImport
 
@@ -77,10 +75,8 @@ class TestBase(BaseTest):
                                      samplingRate=sampling,
                                      haveDataBeenPhaseFlipped=False)
         cls.launchProtocol(protImport)
-
-        if protImport.outputParticles is None:
-            raise Exception('Import of particles: %s, failed. '
-                            'outputParticles is None.' % sqliteFn)
+        cls.assertIsNotNone(protImport.outputParticles,
+                            "SetOfParticles has not been produced.")
 
         return protImport
 
@@ -90,9 +86,8 @@ class TestBase(BaseTest):
         cls.protCTF = CistemProtCTFFind()
         cls.protCTF.inputMicrographs.set(inputMics)
         cls.launchProtocol(cls.protCTF)
-
-        if cls.protCTF.outputCTF is None:
-            raise Exception("SetOfCTF has not been produced.")
+        cls.assertIsNotNone(cls.protCTF.outputCTF,
+                            "SetOfCTF has not been produced.")
 
         return cls.protCTF
 
@@ -102,9 +97,11 @@ class TestCtffind4(TestBase):
     def setUpClass(cls):
         setupTestProject(cls)
         TestBase.setData()
+        print(magentaStr("\n==> Importing data - micrographs:"))
         cls.protImport = cls.runImportMicrographBPV(cls.micFn)
     
     def testCtffind4V1(self):
+        print(magentaStr("\n==> Testing cistem - ctffind:"))
         protCTF = CistemProtCTFFind()
         protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
         self.launchProtocol(protCTF, wait=True)
@@ -122,10 +119,13 @@ class TestFindParticles(TestBase):
     def setUpClass(cls):
         setupTestProject(cls)
         TestBase.setData()
+        print(magentaStr("\n==> Importing data - micrographs:"))
         cls.protImport = cls.runImportMicrographBPV(cls.micFn)
+        print(magentaStr("\n==> Running cistem - ctffind:"))
         cls.protCtfRun = cls.runCtffind(cls.protImport.outputMicrographs)
 
     def testFindParts(self):
+        print(magentaStr("\n==> Testing cistem - find particles:"))
         protPick = self.newProtocol(CistemProtFindParticles,
                                     maxradius=300.,
                                     radius=300.,
@@ -146,10 +146,12 @@ class TestRefine2D(TestBase):
         setupTestProject(cls)
         cls.dataset = DataSet.getDataSet('relion_tutorial')
         cls.particlesFn = cls.dataset.getFile('import/case2/particles.sqlite')
+        print(magentaStr("\n==> Importing data - particles:"))
         cls.protImport = cls.runImportParticlesSqlite(cls.particlesFn,
                                                       sampling=3.5)
 
     def testClassify2D(self):
+        print(magentaStr("\n==> Testing cistem - refine2d:"))
         prot2D = self.newProtocol(CistemProtRefine2D,
                                   numberOfThreads=3)
         prot2D.numberOfClassAvg.set(4)
