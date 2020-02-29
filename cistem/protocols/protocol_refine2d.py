@@ -835,8 +835,6 @@ eof
                             percUsed = 30.0
                     else:
                         percUsed = 100.0
-        else:
-            percUsed = percUsed
         if percUsed < minPercUsed:
             percUsed = minPercUsed
 
