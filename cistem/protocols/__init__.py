@@ -29,3 +29,10 @@ from .protocol_unblur import CistemProtUnblur
 from .protocol_picking import CistemProtFindParticles
 from .protocol_refine2d import CistemProtRefine2D
 # from .protocol_abinitio import CistemProtAbInitio
+
+try:
+    from .protocol_ts_ctffind import ProtTsCtffind
+except ImportError:
+    raise ImportError(
+        'To use a Tomography protocol scipion-em-tomo plugin is required.'
+        ' See https://github.com/scipion-em/scipion-em-tomo for further details')

@@ -50,8 +50,8 @@ class ProgramCtffind:
         self._args, self._params = self._getArgs(protocol)  # Load general arguments
 
     @classmethod
-    def defineFormParams(cls, form):
-        """ Define some parameters from this program into the given form. """
+    def defineInputParams(cls, form):
+        """ Define input parameters from this program into the given form. """
         form.addSection(label='Input')
         form.addParam('recalculate', params.BooleanParam, default=False,
                       condition='recalculate',
@@ -61,6 +61,8 @@ class ProgramCtffind:
                       pointerClass='CistemProtCTFFind')
         form.addHidden('sqliteFile', params.FileParam, condition='recalculate',
                        allowsNull=True)
+        # ctffind resamples input mics automatically
+        form.addHidden('ctfDownFactor', params.FloatParam, default=1.)
 
         form.addParam('inputType', params.EnumParam, default=1,
                       label='Estimate using:',
@@ -74,7 +76,6 @@ class ProgramCtffind:
                       condition='not recalculate and inputType==0',
                       label='Input movies',
                       pointerClass='SetOfMovies')
-
         form.addParam('avgFrames', params.IntParam, default=3,
                       condition='inputType==0',
                       label='No. movie frames to average',
@@ -82,6 +83,9 @@ class ProgramCtffind:
                            'enter how many frames should be included '
                            'in the sub-averages used to calculate '
                            'the amplitude spectra.')
+
+    @classmethod
+    def defineProcessParams(cls, form):
         form.addParam('windowSize', params.IntParam, default=512,
                       label='Box size (px)', condition='not recalculate',
                       help='The dimensions (in pixels) of the amplitude '
@@ -207,6 +211,7 @@ class ProgramCtffind:
         paramDict['astigmatism'] = protocol.astigmatism.get()
         paramDict['lowRes'] = protocol.lowRes.get()
         paramDict['highRes'] = protocol.highRes.get()
+        # defocus is in Angstroms now
         paramDict['minDefocus'] = protocol.minDefocus.get()
         paramDict['maxDefocus'] = protocol.maxDefocus.get()
 
