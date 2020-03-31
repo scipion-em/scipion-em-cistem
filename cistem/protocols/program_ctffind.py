@@ -61,8 +61,6 @@ class ProgramCtffind:
                       pointerClass='CistemProtCTFFind')
         form.addHidden('sqliteFile', params.FileParam, condition='recalculate',
                        allowsNull=True)
-        # ctffind resamples input mics automatically
-        form.addHidden('ctfDownFactor', params.FloatParam, default=1.)
 
         form.addParam('inputType', params.EnumParam, default=1,
                       label='Estimate using:',

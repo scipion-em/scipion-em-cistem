@@ -65,6 +65,8 @@ class ProtTsCtffind(ProtTsEstimateCTF):
         form.addHidden('sqliteFile', params.FileParam,
                        condition='recalculate',
                        allowsNull=True)
+        # ctffind resamples input mics automatically
+        form.addHidden('ctfDownFactor', params.FloatParam, default=1.)
         ProgramCtffind.defineProcessParams(form)
 
     # --------------------------- STEPS functions -----------------------------
