@@ -6,9 +6,13 @@ cisTEM plugin
 
 This plugin provide wrappers around several programs of `cisTEM <https://cistem.org>`_ software suite.
 
-.. figure:: http://scipion-test.cnb.csic.es:9980/badges/cistem_devel.svg
-   :align: left
-   :alt: build status
++------------------+------------------+
+| stable: |stable| | devel: | |devel| |
++------------------+------------------+
+
+.. |stable| image:: http://scipion-test.cnb.csic.es:9980/badges/cistem_sdevel.svg
+.. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/cistem_sdevel.svg
+
 
 Installation
 ------------
@@ -44,10 +48,10 @@ To check the installation, simply run one of the following Scipion tests:
 
 .. code-block::
 
-   scipion tests cistem.tests.test_protocols_cistem_movies.TestUnblur
-   scipion tests cistem.tests.test_protocols_cistem.TestCtffind4
-   scipion tests cistem.tests.test_protocols_cistem.TestFindParticles
-   scipion tests cistem.tests.test_protocols_cistem.TestRefine2D
+   scipion test cistem.tests.test_protocols_cistem_movies.TestUnblur
+   scipion test cistem.tests.test_protocols_cistem.TestCtffind4
+   scipion test cistem.tests.test_protocols_cistem.TestFindParticles
+   scipion test cistem.tests.test_protocols_cistem.TestRefine2D
 
 A complete list of tests can also be seen by executing ``scipion test --show --grep cistem``
 

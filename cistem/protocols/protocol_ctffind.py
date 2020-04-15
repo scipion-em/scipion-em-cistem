@@ -48,7 +48,8 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     _label = 'ctffind4'
 
     def _defineParams(self, form):
-        ProgramCtffind.defineFormParams(form)
+        ProgramCtffind.defineInputParams(form)
+        ProgramCtffind.defineProcessParams(form)
         self._defineStreamingParams(form)
 
     def _defineCtfParamsDict(self):
