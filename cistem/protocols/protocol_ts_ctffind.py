@@ -72,6 +72,9 @@ class ProtTsCtffind(ProtTsEstimateCTF):
     # --------------------------- STEPS functions -----------------------------
     def _estimateCtf(self, workingDir, tiFn, ti):
         try:
+            tsId = ti.getTsId()
+            pwutils.makePath(self._getExtraPath(tsId))
+
             outputLog = os.path.join(workingDir, 'output-log.txt')
             outputPsd = os.path.join(workingDir, self.getPsdName(ti))
 
@@ -82,9 +85,9 @@ class ProtTsCtffind(ProtTsEstimateCTF):
             self.runJob(program, args)
 
             # Move files we want to keep
-            pwutils.moveFile(outputPsd, self._getExtraPath())
+            pwutils.moveFile(outputPsd, self._getExtraPath(tsId))
             pwutils.moveFile(outputPsd.replace('.mrc', '.txt'),
-                             self._getTmpPath())
+                             self._getExtraPath(tsId))
         except Exception as ex:
             print("ERROR: Ctffind has failed for %s" % tiFn)
 
