@@ -54,6 +54,8 @@ class GrigorieffLabImportCTF:
                     if psdFile.endswith('.ctf'):
                         psdFile += ':mrc'
                     ctf.setPsdFile(psdFile)
+                    return ctf
+
         return ctf
 
 
@@ -98,8 +100,5 @@ class GrigorieffLabImportParticles:
         self.protocol._defineOutputs(outputParticles=partSet)
 
     def validateParticles(self):
-        """ Should be overwritten in subclasses to
-        return summary message for NORMAL EXECUTION.
-        """
         errors = []
         return errors

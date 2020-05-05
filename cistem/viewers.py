@@ -23,7 +23,6 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from io import open
 
 from pyworkflow.protocol.params import LabelParam
 from pyworkflow.utils import removeExt, cleanPath
@@ -45,12 +44,10 @@ def createCtfPlot(ctfSet, ctfId):
     a = xplotter.createSubPlot(plot_title, 'Spacial frequency (1/A)',
                                'Amplitude (or cross-correlation)',
                                yformat=False)
-    
     legendName = ['Amplitude spectrum',
                   'CTF Fit',
                   'Quality of fit']
-    for i in [2, 3, 4]:
-        _plotCurve(a, i, fn)
+    _plotCurves(a, fn)
     xplotter.showLegend(legendName, loc='upper right')
     a.set_ylim([-0.1, 1.1])
     a.grid(True)
@@ -76,25 +73,29 @@ def getPlotSubtitle(ctf):
     return title
 
 
-def _plotCurve(a, i, fn):
-    freqs = _getValues(fn, 0)
-    curv = _getValues(fn, i)
-    a.plot(freqs, curv)
+def _plotCurves(a, fn):
+    freqs, amp, fit, quality = _getValues(fn)
+    for y in [amp, fit, quality]:
+        a.plot(freqs, y)
 
 
-def _getValues(fn, row):
-    f = open(fn)
-    values = []
-    i = 0
-    for line in f:
-        line = line.strip()
-        if not line.startswith("#"):
-            if i == row:
-                values = map(float, line.split())
-                break
-            i += 1
-    f.close()
-    return list(values)
+def _getValues(fn):
+    with open(fn) as f:
+        i = 0
+        for line in f:
+            line = line.strip()
+            if not line.startswith("#"):
+                if i == 0:
+                    freqs = list(map(float, line.split()))
+                elif i == 2:
+                    amp = list(map(float, line.split()))
+                elif i == 3:
+                    fit = list(map(float, line.split()))
+                elif i == 4:
+                    quality = list(map(float, line.split()))
+                    break
+                i += 1
+    return freqs, amp, fit, quality
 
 
 OBJCMD_CTFFIND4 = "CTFFind plot results"
@@ -203,7 +204,6 @@ class ProtUnblurViewer(EmProtocolViewer):
         movieSet.copyInfo(inputMovies)
         movieSet.copyItems(inputMovies,
                            updateItemCallback=self._findFailedMovies)
-
         movieSet.write()
         movieSet.close()
 

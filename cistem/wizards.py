@@ -72,7 +72,3 @@ class CistemCTFWizard(CtfWizard):
             dialog.showWarning("Empty input",
                                "Select elements first",
                                form.root)
-    
-    @classmethod    
-    def getView(cls):
-        return "wiz_ctf"

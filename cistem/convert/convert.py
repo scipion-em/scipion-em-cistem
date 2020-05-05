@@ -97,13 +97,11 @@ def parseCtffind4Output(filename):
     """
     result = None
     if os.path.exists(filename):
-        f = open(filename)
-        for line in f:
-            if not line.startswith("#"):
-                result = tuple(map(float, line.split()[1:]))
-                # Stop reading. In ctffind4-4.0.15 there are extra lines
-                break
-        f.close()
+        with open(filename) as f:
+            for line in f:
+                if not line.startswith("#"):
+                    result = tuple(map(float, line.split()[1:7]))
+                    break
     else:
         print("Warning: Missing file: ", filename)
     return result
@@ -119,7 +117,7 @@ def readCtfModel(ctfModel, filename):
     result = parseCtffind4Output(filename)
     if result is None:
         setWrongDefocus(ctfModel)
-        ctfFit, ctfResolution, ctfPhaseShift = -999, -999, -999
+        ctfFit, ctfResolution, ctfPhaseShift = -999, -999, 0
     else:
         defocusU, defocusV, defocusAngle, ctfPhaseShift, ctfFit, ctfResolution = result
         ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
@@ -133,17 +131,16 @@ def readCtfModel(ctfModel, filename):
 
 
 def readShiftsMovieAlignment(shiftFn):
-    f = open(shiftFn, 'r')
-    xshifts = []
-    yshifts = []
+    with open(shiftFn, 'r') as f:
+        xshifts = []
+        yshifts = []
 
-    for line in f:
-        line2 = line.strip()
-        if line2.startswith('image #'):
-            parts = line2.split()
-            xshifts.append(float(parts[-2].rstrip(',')))
-            yshifts.append(float(parts[-1]))
-    f.close()
+        for line in f:
+            line2 = line.strip()
+            if line2.startswith('image #'):
+                parts = line2.split()
+                xshifts.append(float(parts[-2].rstrip(',')))
+                yshifts.append(float(parts[-1]))
     return xshifts, yshifts
 
 
@@ -175,11 +172,10 @@ def writeShiftsMovieAlignment(movie, shiftsFn, s0, sN):
             shiftsY = shiftsY + "%0.4f " % shiftY
         alFrame += 1
 
-    f = open(shiftsFn, 'w')
-    shifts = (initShifts + shiftsX + " " + finalShifts + "\n"
-              + initShifts + shiftsY + " " + finalShifts)
-    f.write(shifts)
-    f.close()
+    with open(shiftsFn, 'w') as f:
+        shifts = (initShifts + shiftsX + " " + finalShifts + "\n"
+                  + initShifts + shiftsY + " " + finalShifts)
+        f.write(shifts)
 
 
 def readSetOfCoordinates(workDir, micSet, coordSet):
@@ -201,7 +197,6 @@ def readCoordinates(mic, fn, coordsSet):
                 coord.setPosition(x, y)
                 coord.setMicrograph(mic)
                 coordsSet.append(coord)
-        f.close()
 
 
 def writeReferences(inputSet, outputFn):
@@ -240,8 +235,8 @@ def rowToAlignment(alignmentRow, samplingRate):
     angles[0] = float(alignmentRow.get('PSI'))
     angles[1] = float(alignmentRow.get('THETA'))
     angles[2] = float(alignmentRow.get('PHI'))
-    shifts[0] = float(alignmentRow.get('SHX'))/samplingRate
-    shifts[1] = float(alignmentRow.get('SHY'))/samplingRate
+    shifts[0] = float(alignmentRow.get('SHX')) / samplingRate
+    shifts[1] = float(alignmentRow.get('SHY')) / samplingRate
 
     M = matrixFromGeometry(shifts, angles)
     alignment.setMatrix(M)
@@ -253,26 +248,19 @@ def matrixFromGeometry(shifts, angles):
     """ Create the transformation matrix from a given
     2D shifts in X and Y...and the 3 euler angles.
     """
-    inverseTransform = True
     radAngles = -np.deg2rad(angles)
 
     M = transformations.euler_matrix(
         radAngles[0], radAngles[1], radAngles[2], 'szyz')
-    if inverseTransform:
-        M[:3, 3] = -shifts[:3]
-        M = np.linalg.inv(M)
-    else:
-        M[:3, 3] = shifts[:3]
+    M[:3, 3] = -shifts[:3]
+    M = np.linalg.inv(M)
 
     return M
 
 
-def geometryFromMatrix(matrix, inverseTransform=True):
-    if inverseTransform:
-        matrix = np.linalg.inv(matrix)
-        shifts = -transformations.translation_from_matrix(matrix)
-    else:
-        shifts = transformations.translation_from_matrix(matrix)
+def geometryFromMatrix(matrix):
+    matrix = np.linalg.inv(matrix)
+    shifts = -transformations.translation_from_matrix(matrix)
     angles = -np.rad2deg(transformations.euler_from_matrix(matrix, axes='szyz'))
 
     return shifts, angles

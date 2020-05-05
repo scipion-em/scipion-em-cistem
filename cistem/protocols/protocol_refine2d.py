@@ -339,31 +339,30 @@ class CistemProtRefine2D(ProtClassify2D):
         """ Construct a parameter file (.par). """
         #  This function will be called only for iterations 1 and 2.
         parFn = self._getExtraPath(self._getFileName('iter_par', iter=1))
-        f = open(parFn, 'w')
-        f.write("C           PSI   THETA     PHI       SHX       SHY     MAG  "
-                "FILM      DF1      DF2  ANGAST  PSHIFT     OCC      LogP"
-                "      SIGMA   SCORE  CHANGE\n")
-        hasAlignment = self.hasAlignment()
+        with open(parFn, 'w') as f:
+            f.write("C           PSI   THETA     PHI       SHX       SHY     MAG  "
+                    "FILM      DF1      DF2  ANGAST  PSHIFT     OCC      LogP"
+                    "      SIGMA   SCORE  CHANGE\n")
+            hasAlignment = self.hasAlignment()
 
-        for i, part in self.iterParticlesByMic():
-            ctf = part.getCTF()
-            defocusU, defocusV = ctf.getDefocusU(), ctf.getDefocusV()
-            astig = ctf.getDefocusAngle()
-            phaseShift = ctf.getPhaseShift() or 0.00
+            for i, part in self.iterParticlesByMic():
+                ctf = part.getCTF()
+                defocusU, defocusV = ctf.getDefocusU(), ctf.getDefocusV()
+                astig = ctf.getDefocusAngle()
+                phaseShift = ctf.getPhaseShift() or 0.00
 
-            if hasAlignment:
-                _, angles = geometryFromMatrix(part.getTransform().getMatrix())
-                psi = angles[2]
-            else:
-                psi = 0.0
+                if hasAlignment:
+                    _, angles = geometryFromMatrix(part.getTransform().getMatrix())
+                    psi = angles[2]
+                else:
+                    psi = 0.0
 
-            string = '%7d%8.2f%8.2f%8.2f%10.2f%10.2f%8d%6d%9.1f%9.1f' \
-                     '%8.2f%8.2f%8.2f%10d%11.4f%8.2f%8.2f\n' % (
-                         i + 1, psi, 0., 0., 0., 0., 0, 0, defocusU, defocusV,
-                         astig, phaseShift, 100., 0, 10., 0., 0.)
+                string = '%7d%8.2f%8.2f%8.2f%10.2f%10.2f%8d%6d%9.1f%9.1f' \
+                         '%8.2f%8.2f%8.2f%10d%11.4f%8.2f%8.2f\n' % (
+                             i + 1, psi, 0., 0., 0., 0., 0, 0, defocusU, defocusV,
+                             astig, phaseShift, 100., 0, 10., 0., 0.)
 
-            f.write(string)
-        f.close()
+                f.write(string)
 
     def makeInitClassesStep(self, paramsDic):
         argsStr = self._getRefineArgs()
@@ -499,7 +498,7 @@ class CistemProtRefine2D(ProtClassify2D):
             if self.hasAttribute('numberOfIterations'):
                 iterMsg += '/%d' % self._getnumberOfIters()
         else:
-            iterMsg = 'No iteration finished yet.'
+            iterMsg = 'No iterations finished yet.'
         summary = [iterMsg]
 
         if self.doContinue:
@@ -638,14 +637,11 @@ class CistemProtRefine2D(ProtClassify2D):
 
     def _iterRows(self, iterN):
         filePar = self._getFileName('iter_par', iter=iterN)
-        f1 = open(self._getExtraPath(filePar))
-        for line in f1:
-            if not line.startswith("C"):
-                values = map(float, line.strip().split())
-
-                yield values
-
-        f1.close()
+        with open(self._getExtraPath(filePar)) as f1:
+            for line in f1:
+                if not line.startswith("C"):
+                    values = map(float, line.strip().split())
+                    yield values
 
     def iterParticlesByMic(self):
         """ Iterate the particles ordered by micrograph """

@@ -305,11 +305,10 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
     def _methods(self):
         methodsMsgs = []
-        if self.getInputMicrographs() is None:
-            return ['Input micrographs not available yet.']
-        methodsMsgs.append("Input micrographs %s of size %d."
-                           % (self.getObjectTag(self.getInputMicrographs()),
-                              self.getInputMicrographs().getSize()))
+        if self.getInputMicrographs() is not None:
+            methodsMsgs.append("Input micrographs %s of size %d."
+                               % (self.getObjectTag(self.getInputMicrographs()),
+                                  self.getInputMicrographs().getSize()))
 
         if self.getOutputsSize() > 0:
             output = self.getCoords()
@@ -436,12 +435,9 @@ eof"""
 
     def readCoordsFromMics(self, extraDir, micList, coordSet):
         if coordSet.getBoxSize() is None:
-            coordSet.setBoxSize(self._getBoxSize())
+            coordSet.setBoxSize(128)
 
         readSetOfCoordinates(self._getExtraPath(), micList, coordSet)
-
-    def _getBoxSize(self):
-        return 128
 
     def _getMicrographDir(self, mic):
         """ Return an unique dir name for results of the micrograph. """
@@ -464,4 +460,4 @@ eof"""
                             pwutils.replaceBaseExt(micName, 'plt'))
 
     def getInputReferences(self):
-        return self.inputRefs.get() if self.inputRefs else None
+        return self.inputRefs.get() if self.inputRefs.hasValue() else None

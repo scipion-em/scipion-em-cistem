@@ -34,20 +34,20 @@ from math import ceil
 from threading import Thread
 
 import pyworkflow.utils as pwutils
-from pwem.objects import MovieAlignment, Image
+from pwem.objects import Image
 from pyworkflow.protocol import STEPS_PARALLEL
 from pwem.protocols import ProtAlignMovies
 import pyworkflow.protocol.params as params
 from pyworkflow.gui.plotter import Plotter
 
 from cistem import Plugin
-from ..convert import (readShiftsMovieAlignment,
-                       writeShiftsMovieAlignment)
+from ..convert import readShiftsMovieAlignment
 from ..constants import UNBLUR_BIN
 
 
 class CistemProtUnblur(ProtAlignMovies):
     """ This protocol wraps unblur movie alignment program.
+
     More information at https://cistem.org/documentation
     """
     _label = 'unblur'
@@ -216,13 +216,8 @@ class CistemProtUnblur(ProtAlignMovies):
             def _extraWork():
                 if self.doComputePSD:
                     # Compute uncorrected avg mic
-                    roi = [0, 0, 0, 0]
-                    fakeShiftsFn = self.writeZeroShifts(movie)
-                    # FIXME: implement gain flip/rotation
-                    self.averageMovie(movie, fakeShiftsFn, aveMicFn,
-                                      binFactor=self.binFactor.get(),
-                                      roi=roi, dark=inputMovies.getDark(),
-                                      gain=inputMovies.getGain())
+                    self.averageMovie(movie, self._getMovieFn(movie), aveMicFn,
+                                      binFactor=self.binFactor.get())
 
                     self.computePSDImages(movie, aveMicFn, outMicFn,
                                           outputFnCorrected=self._getPsdJpeg(movie))
@@ -245,20 +240,6 @@ class CistemProtUnblur(ProtAlignMovies):
 
         except:
             print("ERROR: Failed to align movie %s\n" % movie.getFileName())
-
-    # FIXME: Patch for Scipion2. For Scipion 3 this should be in the parent class and this can be removed
-    def createOutputStep(self):
-        # validate that we have some output movies
-        for outName, out in self.iterOutputAttributes():
-            output = out
-            break
-
-        if output.getSize() == 0 and len(self.listOfMovies) != 0:
-            raise Exception(pwutils.redStr("All movies failed, didn't create outputMicrographs."
-                                   "Please review movie processing steps above."))
-        elif output.getSize() < len(self.listOfMovies):
-            self.warning(pwutils.yellowStr("WARNING - Failed to align %d movies."
-                                           % (len(self.listOfMovies) - output.getSize())))
 
     def _insertFinalSteps(self, deps):
         stepId = self._insertFunctionStep('waitForThreadStep',
@@ -424,21 +405,6 @@ eof\n
         yShiftsCorr = [y / pixSize for y in yShifts]
 
         return xShiftsCorr, yShiftsCorr
-
-    def writeZeroShifts(self, movie):
-        # TODO: find another way to do this
-        shiftsMd = self._getTmpPath('zero_shifts.xmd')
-        pwutils.cleanPath(shiftsMd)
-        xshifts = [0] * movie.getNumberOfFrames()
-        yshifts = xshifts
-        alignment = MovieAlignment(first=1, last=movie.getNumberOfFrames(),
-                                   xshifts=xshifts, yshifts=yshifts)
-        roiList = [0, 0, 0, 0]
-        alignment.setRoi(roiList)
-        movie.setAlignment(alignment)
-        writeShiftsMovieAlignment(movie, shiftsMd,
-                                  1, movie.getNumberOfFrames())
-        return shiftsMd
 
     def _doComputeMicThumbnail(self):
         return self.doComputeMicThumbnail.get()

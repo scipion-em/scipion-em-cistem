@@ -153,10 +153,10 @@ class TestRefine2D(TestBase):
     def testClassify2D(self):
         print(magentaStr("\n==> Testing cistem - refine2d:"))
         prot2D = self.newProtocol(CistemProtRefine2D,
+                                  numberOfClassAvg=4,
+                                  numberOfIterations=3,
+                                  areParticlesBlack=False,
                                   numberOfThreads=3)
-        prot2D.numberOfClassAvg.set(4)
-        prot2D.numberOfIterations.set(3)
-        prot2D.areParticlesBlack.set(False)
         prot2D.inputParticles.set(self.protImport.outputParticles)
 
         self.launchProtocol(prot2D)

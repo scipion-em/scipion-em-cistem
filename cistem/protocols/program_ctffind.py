@@ -2,7 +2,6 @@
 # *
 # * Authors:     Josue Gomez BLanco (josue.gomez-blanco@mcgill.ca) [1]
 # *              J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [2]
-
 # *
 # * [1] Department of Anatomy and Cell Biology, McGill University
 # * [2] SciLifeLab, Stockholm University

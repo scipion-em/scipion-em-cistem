@@ -43,7 +43,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     Estimates CTF for a set of micrographs/movies with ctffind4.
     
     To find more information about ctffind4 go to:
-    http://ctffind.janelia.org/ctffind4
+    https://grigoriefflab.umassmed.edu/ctffind4
     """
     _label = 'ctffind4'
 
@@ -122,15 +122,20 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     def _citations(self):
         return ["Mindell2003", "Rohou2015"]
 
-    def _methods(self):
-        if self.inputMicrographs.get() is None:
-            return ['Input micrographs not available yet.']
-        methods = ("We calculated the CTF of %s using CTFFind. "
-                   % self.getObjectTag('inputMicrographs'))
-        methods += self.methodsVar.get('')
-        methods += 'Output CTFs: %s' % self.getObjectTag('outputCTF')
+    def _summary(self):
+        summary = ProtCTFMicrographs._summary(self)
+        return summary
 
-        return [methods]
+    def _methods(self):
+        methods = []
+        if self.inputMicrographs.get() is not None:
+            methods.append("We calculated the CTF of %s using CTFFind. "
+                       % self.getObjectTag('inputMicrographs'))
+            methods.append(self.methodsVar.get(''))
+            if getattr(self, 'outputCTF'):
+                methods.append('Output CTFs: %s' % self.getObjectTag('outputCTF'))
+
+        return methods
 
     # -------------------------- UTILS functions ------------------------------
     def _getRecalCtfParamsDict(self, ctfModel):
@@ -167,7 +172,3 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         ctf.setPsdFile(psdFile)
 
         return ctf
-
-    def _summary(self):
-        summary = ProtCTFMicrographs._summary(self)
-        return summary
