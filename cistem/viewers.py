@@ -74,28 +74,29 @@ def getPlotSubtitle(ctf):
 
 
 def _plotCurves(a, fn):
-    freqs, amp, fit, quality = _getValues(fn)
-    for y in [amp, fit, quality]:
-        a.plot(freqs, y)
+    res = _getValues(fn)
+    for y in ['amp', 'fit', 'quality']:
+        a.plot(res['freq'], res[y])
 
 
 def _getValues(fn):
+    res = dict()
     with open(fn) as f:
         i = 0
         for line in f:
             line = line.strip()
             if not line.startswith("#"):
                 if i == 0:
-                    freqs = list(map(float, line.split()))
+                    res['freq'] = [float(x) for x in line.split()]
                 elif i == 2:
-                    amp = list(map(float, line.split()))
+                    res['amp'] = [float(x) for x in line.split()]
                 elif i == 3:
-                    fit = list(map(float, line.split()))
+                    res['fit'] = [float(x) for x in line.split()]
                 elif i == 4:
-                    quality = list(map(float, line.split()))
+                    res['quality'] = [float(x) for x in line.split()]
                     break
                 i += 1
-    return freqs, amp, fit, quality
+    return res
 
 
 OBJCMD_CTFFIND4 = "CTFFind plot results"

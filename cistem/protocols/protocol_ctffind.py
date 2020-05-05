@@ -139,7 +139,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     # -------------------------- UTILS functions ------------------------------
     def _getRecalCtfParamsDict(self, ctfModel):
-        values = list(map(float, ctfModel.getObjComment().split()))
+        values = [float(x) for x in ctfModel.getObjComment().split()]
         sampling = self.inputMicrographs.get().getSamplingRate()
         return {
             'step_focus': 500.0,
