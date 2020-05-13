@@ -1,3 +1,9 @@
+1.0.3:
+    - fixes for tomo ctffind protocol
+    - remove unnecessary scipion 2 code
+    - remove writeShiftsMovieAlignment
+    - use "with open", default phaseShift=0
+    - refactor ctffit plot code
 1.0.1:
     - First Scipion 3 / python 3 version.
     - Added continue mode to refine2d
