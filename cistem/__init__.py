@@ -74,8 +74,7 @@ class Plugin(pwem.Plugin):
     def defineBinaries(cls, env):
         env.addPackage('cistem', version='1.0.0-beta',
                        url='"https://cistem.org/system/tdf/upload3/cistem-1.0.0'
-                           '-beta-intel-linux.tar.gz?file=1&type=cistem_details'
-                           '&id=37&force=0&s3fs=1"',
+                       '-beta-intel-linux.tar.gz?file=1&type=cistem_details&id=37&force=0"',
                        default=True)
         env.addPackage('ctffind4', version='4.1.13',
                        tar='ctffind4-4.1.13.tgz')
