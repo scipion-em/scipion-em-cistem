@@ -30,27 +30,30 @@
 
 import os
 
-import pyworkflow as pw
+import pyworkflow.utils as pwutils
+from pwem.protocols import ProtCTFMicrographs
+from pwem.objects import CTFModel
+from pwem import emlib
 
-from cistem.constants import *
 from .program_ctffind import ProgramCtffind
 
 
-class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
+class CistemProtCTFFind(ProtCTFMicrographs):
     """
     Estimates CTF for a set of micrographs/movies with ctffind4.
     
     To find more information about ctffind4 go to:
-    http://ctffind.janelia.org/ctffind4
+    https://grigoriefflab.umassmed.edu/ctffind4
     """
     _label = 'ctffind4'
 
     def _defineParams(self, form):
-        ProgramCtffind.defineFormParams(form)
+        ProgramCtffind.defineInputParams(form)
+        ProgramCtffind.defineProcessParams(form)
         self._defineStreamingParams(form)
 
     def _defineCtfParamsDict(self):
-        pw.em.ProtCTFMicrographs._defineCtfParamsDict(self)
+        ProtCTFMicrographs._defineCtfParamsDict(self)
         self._ctfProgram = ProgramCtffind(self)
 
     # -------------------------- STEPS functions ------------------------------
@@ -59,15 +62,15 @@ class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
         micFn = mic.getFileName()
         micDir = self._getTmpPath('mic_%06d' % mic.getObjId())
         # Create micrograph dir
-        pw.utils.makePath(micDir)
-        micFnMrc = os.path.join(micDir, pw.utils.replaceBaseExt(micFn, 'mrc'))
+        pwutils.makePath(micDir)
+        micFnMrc = os.path.join(micDir, pwutils.replaceBaseExt(micFn, 'mrc'))
 
-        ih = pw.em.ImageHandler()
+        ih = emlib.image.ImageHandler()
 
         if not ih.existsLocation(micFn):
             raise Exception("Missing input micrograph: %s" % micFn)
 
-        ih.convert(micFn, micFnMrc, pw.em.DT_FLOAT)
+        ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
 
         try:
             program, args = self._ctfProgram.getCommand(
@@ -77,12 +80,10 @@ class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
                 **kwargs)
             self.runJob(program, args)
 
-            pw.utils.cleanPath(micDir)
+            pwutils.cleanPath(micDir)
 
-        except:
+        except Exception as ex:
             print("ERROR: Ctffind has failed for %s" % micFnMrc)
-            import traceback
-            traceback.print_exc()
 
     def _estimateCTF(self, mic, *args):
         self._doCtfEstimation(mic)
@@ -121,19 +122,24 @@ class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
     def _citations(self):
         return ["Mindell2003", "Rohou2015"]
 
-    def _methods(self):
-        if self.inputMicrographs.get() is None:
-            return ['Input micrographs not available yet.']
-        methods = ("We calculated the CTF of %s using CTFFind. "
-                   % self.getObjectTag('inputMicrographs'))
-        methods += self.methodsVar.get('')
-        methods += 'Output CTFs: %s' % self.getObjectTag('outputCTF')
+    def _summary(self):
+        summary = ProtCTFMicrographs._summary(self)
+        return summary
 
-        return [methods]
+    def _methods(self):
+        methods = []
+        if self.inputMicrographs.get() is not None:
+            methods.append("We calculated the CTF of %s using CTFFind. "
+                       % self.getObjectTag('inputMicrographs'))
+            methods.append(self.methodsVar.get(''))
+            if getattr(self, 'outputCTF'):
+                methods.append('Output CTFs: %s' % self.getObjectTag('outputCTF'))
+
+        return methods
 
     # -------------------------- UTILS functions ------------------------------
     def _getRecalCtfParamsDict(self, ctfModel):
-        values = map(float, ctfModel.getObjComment().split())
+        values = [float(x) for x in ctfModel.getObjComment().split()]
         sampling = self.inputMicrographs.get().getSamplingRate()
         return {
             'step_focus': 500.0,
@@ -145,7 +151,7 @@ class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
 
     def _getMicExtra(self, mic, suffix):
         """ Return a file in extra direction with root of micFn. """
-        return self._getExtraPath(pw.utils.removeBaseExt(os.path.basename(
+        return self._getExtraPath(pwutils.removeBaseExt(os.path.basename(
             mic.getFileName())) + '_' + suffix)
 
     def _getPsdPath(self, mic):
@@ -161,12 +167,8 @@ class CistemProtCTFFind(pw.em.ProtCTFMicrographs):
         return self._ctfProgram.parseOutput(filename)
 
     def _getCTFModel(self, defocusU, defocusV, defocusAngle, psdFile):
-        ctf = pw.em.CTFModel()
+        ctf = CTFModel()
         ctf.setStandardDefocus(defocusU, defocusV, defocusAngle)
         ctf.setPsdFile(psdFile)
 
         return ctf
-
-    def _summary(self):
-        summary = pw.em.ProtCTFMicrographs._summary(self)
-        return summary

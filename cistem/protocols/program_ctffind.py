@@ -2,7 +2,6 @@
 # *
 # * Authors:     Josue Gomez BLanco (josue.gomez-blanco@mcgill.ca) [1]
 # *              J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [2]
-
 # *
 # * [1] Department of Anatomy and Cell Biology, McGill University
 # * [2] SciLifeLab, Stockholm University
@@ -29,12 +28,13 @@
 
 from numpy import deg2rad
 
-import pyworkflow.em as pwem
+from pwem.objects import CTFModel
 import pyworkflow.protocol.params as params
 
 from cistem import Plugin
-from cistem.constants import CTFFIND4_BIN
-import cistem.convert as convert
+from ..constants import CTFFIND4_BIN
+from ..convert import parseCtffind4Output, readCtfModel
+
 
 
 class ProgramCtffind:
@@ -50,8 +50,8 @@ class ProgramCtffind:
         self._args, self._params = self._getArgs(protocol)  # Load general arguments
 
     @classmethod
-    def defineFormParams(cls, form):
-        """ Define some parameters from this program into the given form. """
+    def defineInputParams(cls, form):
+        """ Define input parameters from this program into the given form. """
         form.addSection(label='Input')
         form.addParam('recalculate', params.BooleanParam, default=False,
                       condition='recalculate',
@@ -74,7 +74,6 @@ class ProgramCtffind:
                       condition='not recalculate and inputType==0',
                       label='Input movies',
                       pointerClass='SetOfMovies')
-
         form.addParam('avgFrames', params.IntParam, default=3,
                       condition='inputType==0',
                       label='No. movie frames to average',
@@ -82,6 +81,9 @@ class ProgramCtffind:
                            'enter how many frames should be included '
                            'in the sub-averages used to calculate '
                            'the amplitude spectra.')
+
+    @classmethod
+    def defineProcessParams(cls, form):
         form.addParam('windowSize', params.IntParam, default=512,
                       label='Box size (px)', condition='not recalculate',
                       help='The dimensions (in pixels) of the amplitude '
@@ -97,7 +99,7 @@ class ProgramCtffind:
                              help='The CTF model will be fit to regions '
                                   'of the amplitude spectrum corresponding '
                                   'to this range of resolution.')
-        line.addParam('lowRes', params.FloatParam, default=30., label='Min' )
+        line.addParam('lowRes', params.FloatParam, default=30., label='Min')
         line.addParam('highRes', params.FloatParam, default=5., label='Max')
 
         line = group.addLine('Defocus search range (A)',
@@ -176,22 +178,22 @@ class ProgramCtffind:
         The input keywords argument should contain key-values for
         one micrograph or group of micrographs.
         """
-        params = dict(self._params)
-        params.update(kwargs)
-        return self._program, self._args % params
+        paramDict = dict(self._params)
+        paramDict.update(kwargs)
+        return self._program, self._args % paramDict
 
     def parseOutput(self, filename):
         """ Retrieve defocus U, V and angle from the
         output file of the program execution.
         """
-        return convert.parseCtffind4Output(filename)
+        return parseCtffind4Output(filename)
 
     def parseOutputAsCtf(self, filename, psdFile=None):
         """ Parse the output file and build the CTFModel object
         with the values.
         """
-        ctf = pwem.CTFModel()
-        convert.readCtfModel(ctf, filename)
+        ctf = CTFModel()
+        readCtfModel(ctf, filename)
         if psdFile:
             ctf.setPsdFile(psdFile)
 
@@ -199,26 +201,27 @@ class ProgramCtffind:
 
     def _getArgs(self, protocol):
         # Update first the params dict
-        params = protocol.getCtfParamsDict()
-        if params['lowRes'] > 50:
-            params['lowRes'] = 50
-        params['step_focus'] = protocol.stepDefocus.get()
-        params['fixAstig'] = "yes" if protocol.fixAstig else "no"
-        params['astigmatism'] = protocol.astigmatism.get()
-        params['lowRes'] = protocol.lowRes.get()
-        params['highRes'] = protocol.highRes.get()
-        params['minDefocus'] = protocol.minDefocus.get()
-        params['maxDefocus'] = protocol.maxDefocus.get()
+        paramDict = protocol.getCtfParamsDict()
+        if paramDict['lowRes'] > 50:
+            paramDict['lowRes'] = 50
+        paramDict['step_focus'] = protocol.stepDefocus.get()
+        paramDict['fixAstig'] = "yes" if protocol.fixAstig else "no"
+        paramDict['astigmatism'] = protocol.astigmatism.get()
+        paramDict['lowRes'] = protocol.lowRes.get()
+        paramDict['highRes'] = protocol.highRes.get()
+        # defocus is in Angstroms now
+        paramDict['minDefocus'] = protocol.minDefocus.get()
+        paramDict['maxDefocus'] = protocol.maxDefocus.get()
 
         if self._findPhaseShift:
-            params['phaseShift'] = "yes"
-            params['minPhaseShift'] = deg2rad(protocol.minPhaseShift.get())
-            params['maxPhaseShift'] = deg2rad(protocol.maxPhaseShift.get())
-            params['stepPhaseShift'] = deg2rad(protocol.stepPhaseShift.get())
+            paramDict['phaseShift'] = "yes"
+            paramDict['minPhaseShift'] = deg2rad(protocol.minPhaseShift.get())
+            paramDict['maxPhaseShift'] = deg2rad(protocol.maxPhaseShift.get())
+            paramDict['stepPhaseShift'] = deg2rad(protocol.stepPhaseShift.get())
         else:
-            params['phaseShift'] = "no"
+            paramDict['phaseShift'] = "no"
 
-        params['slowSearch'] = "yes" if protocol.slowSearch else "no"
+        paramDict['slowSearch'] = "yes" if protocol.slowSearch else "no"
 
         args = """   << eof > %(ctffindOut)s
 %(micFn)s
@@ -252,4 +255,4 @@ eof\n
                                 '%(minPhaseShift)f\n'
                                 '%(maxPhaseShift)f\n'
                                 '%(stepPhaseShift)f')
-        return args, params
+        return args, paramDict

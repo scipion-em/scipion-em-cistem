@@ -30,26 +30,24 @@
 
 import os
 import time
-from itertools import izip
 from math import ceil
 from threading import Thread
 
 import pyworkflow.utils as pwutils
-import pyworkflow.em as em
-from pyworkflow.em.data import MovieAlignment
+from pwem.objects import Image
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.em.protocol import ProtAlignMovies
+from pwem.protocols import ProtAlignMovies
 import pyworkflow.protocol.params as params
 from pyworkflow.gui.plotter import Plotter
 
 from cistem import Plugin
-from cistem.convert import (readShiftsMovieAlignment,
-                            writeShiftsMovieAlignment)
-from cistem.constants import UNBLUR_BIN
+from ..convert import readShiftsMovieAlignment
+from ..constants import UNBLUR_BIN
 
 
 class CistemProtUnblur(ProtAlignMovies):
     """ This protocol wraps unblur movie alignment program.
+
     More information at https://cistem.org/documentation
     """
     _label = 'unblur'
@@ -192,7 +190,7 @@ class CistemProtUnblur(ProtAlignMovies):
 
         form.addParallelSection(threads=1, mpi=1)
 
-    #--------------------------- STEPS functions -------------------------------
+    # --------------------------- STEPS functions -----------------------------
 
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
@@ -218,16 +216,11 @@ class CistemProtUnblur(ProtAlignMovies):
             def _extraWork():
                 if self.doComputePSD:
                     # Compute uncorrected avg mic
-                    roi = [0, 0, 0, 0]
-                    fakeShiftsFn = self.writeZeroShifts(movie)
-                    # FIXME: implement gain flip/rotation
-                    self.averageMovie(movie, fakeShiftsFn, aveMicFn,
-                                      binFactor=self.binFactor.get(),
-                                      roi=roi, dark=inputMovies.getDark(),
-                                      gain=inputMovies.getGain())
+                    self.averageMovie(movie, self._getMovieFn(movie), aveMicFn,
+                                      binFactor=self.binFactor.get())
 
-                    self.computePSDs(movie, aveMicFn, outMicFn,
-                                     outputFnCorrected=self._getPsdJpeg(movie))
+                    self.computePSDImages(movie, aveMicFn, outMicFn,
+                                          outputFnCorrected=self._getPsdJpeg(movie))
 
                 self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
 
@@ -290,7 +283,7 @@ class CistemProtUnblur(ProtAlignMovies):
 
         return errors
 
-    #--------------------------- UTILS functions -------------------------------
+    # --------------------------- UTILS functions -----------------------------
     def _getProgram(self):
         return Plugin.getProgram(UNBLUR_BIN)
 
@@ -302,7 +295,7 @@ class CistemProtUnblur(ProtAlignMovies):
         else:
             preExp, dose = 0.0, 0.0
 
-        args = {'movieName': pwutils.basename(self._getMovieFn(movie)),
+        args = {'movieName': os.path.basename(self._getMovieFn(movie)),
                 'micFnName': self._getMicFn(movie),
                 'shiftsFn': self._getMovieLogFile(movie),
                 'samplingRate': self.samplingRate,
@@ -413,31 +406,16 @@ eof\n
 
         return xShiftsCorr, yShiftsCorr
 
-    def writeZeroShifts(self, movie):
-        # TODO: find another way to do this
-        shiftsMd = self._getTmpPath('zero_shifts.xmd')
-        pwutils.cleanPath(shiftsMd)
-        xshifts = [0] * movie.getNumberOfFrames()
-        yshifts = xshifts
-        alignment = MovieAlignment(first=1, last=movie.getNumberOfFrames(),
-                                   xshifts=xshifts, yshifts=yshifts)
-        roiList = [0, 0, 0, 0]
-        alignment.setRoi(roiList)
-        movie.setAlignment(alignment)
-        writeShiftsMovieAlignment(movie, shiftsMd,
-                                  1, movie.getNumberOfFrames())
-        return shiftsMd
-
     def _doComputeMicThumbnail(self):
         return self.doComputeMicThumbnail.get()
 
     def _preprocessOutputMicrograph(self, mic, movie):
-        mic.plotGlobal = em.Image(location=self._getPlotGlobal(movie))
+        mic.plotGlobal = Image(location=self._getPlotGlobal(movie))
         if self.doComputePSD:
-            mic.psdCorr = em.Image(location=self._getPsdCorr(movie))
-            mic.psdJpeg = em.Image(location=self._getPsdJpeg(movie))
+            mic.psdCorr = Image(location=self._getPsdCorr(movie))
+            mic.psdJpeg = Image(location=self._getPsdJpeg(movie))
         if self._doComputeMicThumbnail():
-            mic.thumbnail = em.Image(
+            mic.thumbnail = Image(
                 location=self._getOutputMicThumbnail(movie))
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
@@ -479,9 +457,9 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     sumMeanX = []
     sumMeanY = []
 
-    def px_to_ang(ax_px):
-        y1, y2 = ax_px.get_ylim()
-        x1, x2 = ax_px.get_xlim()
+    def px_to_ang(apx):
+        y1, y2 = apx.get_ylim()
+        x1, x2 = apx.get_xlim()
         ax_ang2.set_ylim(y1*pixSize, y2*pixSize)
         ax_ang.set_xlim(x1*pixSize, x2*pixSize)
         ax_ang.figure.canvas.draw()
@@ -505,7 +483,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     skipLabels = ceil(len(meanX)/10.0)
     labelTick = 1
 
-    for x, y in izip(meanX, meanY):
+    for x, y in zip(meanX, meanY):
         sumMeanX.append(x)
         sumMeanY.append(y)
         if labelTick == 1:
@@ -522,7 +500,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     ax_px.plot(sumMeanX, sumMeanY, color='b')
     ax_px.plot(sumMeanX, sumMeanY, 'yo')
     ax_px.plot(sumMeanX[0], sumMeanY[0], 'ro', markersize=10, linewidth=0.5)
-    #ax_ang2.set_title('Full-frame alignment')
+    # ax_ang2.set_title('Full-frame alignment')
 
     plotter.tightLayout()
 

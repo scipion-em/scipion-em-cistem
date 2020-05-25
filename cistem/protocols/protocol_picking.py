@@ -28,15 +28,15 @@ import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.em.constants import RELATION_CTF
-from pyworkflow.em import ProtParticlePickingAuto
-from pyworkflow.em.convert import ImageHandler
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
+from pwem.constants import RELATION_CTF
+from pwem.protocols import ProtParticlePickingAuto
+from pwem import emlib
 
 from cistem import Plugin
-from cistem.convert import readSetOfCoordinates, writeReferences
-from cistem.constants import *
+from ..convert import readSetOfCoordinates, writeReferences
+from ..constants import *
 
 
 class CistemProtFindParticles(ProtParticlePickingAuto):
@@ -199,7 +199,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
         # Remove the micrographs that have no CTF
         # and set the CTF property for those who have it
-        for micKey, mic in micDict.iteritems():
+        for micKey, mic in micDict.items():
             if micKey in ctfDict:
                 mic.setCTF(ctfDict[micKey])
             else:
@@ -216,7 +216,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             for ctf in self.ctfRelations.get():
                 self.ctfDict[ctf.getMicrograph().getMicName()] = ctf.clone()
 
-        ih = ImageHandler()
+        ih = emlib.image.ImageHandler()
         for mic in self.getInputMicrographs():
             micName = mic.getFileName()
             # We convert the input micrographs if they are not .mrc
@@ -231,11 +231,11 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             writeReferences(self.getInputReferences(),
                             self._getExtraPath('references.mrc'))
 
-    def _pickMicrograph(self, mic, args):
-        self._pickMicrographStep([mic], args)
+    def _pickMicrograph(self, mic, *args):
+        self._pickMicrographStep([mic], *args)
 
-    def _pickMicrographList(self, micList, args):
-        self._pickMicrographStep(micList, args)
+    def _pickMicrographList(self, micList, *args):
+        self._pickMicrographStep(micList, *args)
 
     def _pickMicrographStep(self, mics, args):
         for mic in mics:
@@ -288,7 +288,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
     # --------------------------- INFO functions --------------------------------
     def _summary(self):
-        summary = []
+        summary = list()
         summary.append("Number of input micrographs: %d"
                        % self.getInputMicrographs().getSize())
         if self.getOutputsSize() > 0:
@@ -305,11 +305,10 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
     def _methods(self):
         methodsMsgs = []
-        if self.getInputMicrographs() is None:
-            return ['Input micrographs not available yet.']
-        methodsMsgs.append("Input micrographs %s of size %d."
-                           % (self.getObjectTag(self.getInputMicrographs()),
-                              self.getInputMicrographs().getSize()))
+        if self.getInputMicrographs() is not None:
+            methodsMsgs.append("Input micrographs %s of size %d."
+                               % (self.getObjectTag(self.getInputMicrographs()),
+                                  self.getInputMicrographs().getSize()))
 
         if self.getOutputsSize() > 0:
             output = self.getCoords()
@@ -379,7 +378,7 @@ NO
 %(bgBoxes)d
 %(ptclWhite)s
 eof"""
-        else: # ref-based picking
+        else:  # ref-based picking
             argsStr += """
 YES
 %(refsFn)s
@@ -436,12 +435,9 @@ eof"""
 
     def readCoordsFromMics(self, extraDir, micList, coordSet):
         if coordSet.getBoxSize() is None:
-            coordSet.setBoxSize(self._getBoxSize())
+            coordSet.setBoxSize(128)
 
         readSetOfCoordinates(self._getExtraPath(), micList, coordSet)
-
-    def _getBoxSize(self):
-        return 128
 
     def _getMicrographDir(self, mic):
         """ Return an unique dir name for results of the micrograph. """
@@ -464,4 +460,4 @@ eof"""
                             pwutils.replaceBaseExt(micName, 'plt'))
 
     def getInputReferences(self):
-        return self.inputRefs.get() if self.inputRefs else None
+        return self.inputRefs.get() if self.inputRefs.hasValue() else None

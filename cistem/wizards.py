@@ -24,12 +24,13 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.wizard import *
+from pwem.wizards import *
+from pwem.constants import UNIT_ANGSTROM
 
-from cistem.protocols import CistemProtCTFFind
+from .protocols import CistemProtCTFFind
 
 
-class BrandeisCTFWizard(CtfWizard):
+class CistemCTFWizard(CtfWizard):
     _targets = [(CistemProtCTFFind, ['lowRes', 'highRes'])]
     
     def _getParameters(self, protocol):
@@ -71,7 +72,3 @@ class BrandeisCTFWizard(CtfWizard):
             dialog.showWarning("Empty input",
                                "Select elements first",
                                form.root)
-    
-    @classmethod    
-    def getView(self):
-        return "wiz_ctf"

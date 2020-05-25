@@ -26,30 +26,32 @@
 # *
 # **************************************************************************
 
+import os
 import re
 from glob import glob
 from collections import OrderedDict
 
-import pyworkflow.em as em
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
-                                        IntParam, BooleanParam,)
+                                        IntParam, BooleanParam,
+                                        StringParam)
 from pyworkflow.utils.path import (makePath, createLink,
-                                   cleanPattern, moveFile,
-                                   exists)
+                                   cleanPattern, moveFile)
+from pyworkflow.object import Float
+from pwem.protocols import ProtClassify2D
 
 from cistem import Plugin
-from cistem.convert import (writeReferences, geometryFromMatrix,
-                            rowToAlignment, HEADER_COLUMNS)
-from cistem.constants import *
+from ..convert import (writeReferences, geometryFromMatrix,
+                       rowToAlignment, HEADER_COLUMNS)
 
 
-class CistemProtRefine2D(em.ProtClassify2D):
+
+class CistemProtRefine2D(ProtClassify2D):
     """ Protocol to run 2D classification in cisTEM. """
     _label = 'classify 2D'
 
     def __init__(self, **args):
-        em.ProtClassify2D.__init__(self, **args)
+        ProtClassify2D.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL
 
     def _createFilenameTemplates(self):
@@ -68,9 +70,16 @@ class CistemProtRefine2D(em.ProtClassify2D):
     def _createIterTemplates(self):
         """ Setup the regex on how to find iterations. """
         parFn = self._getExtraPath(self._getFileName('iter_par',
-                                                      iter=0))
+                                                     iter=0))
         self._iterTemplate = parFn.replace('0', '*')
         self._iterRegex = re.compile('input_par_(\d{1,2})')
+
+    def _initialize(self):
+        """ This function is mean to be called after the
+        working dir for the protocol have been set. (maybe after recovery from mapper)
+        """
+        self._createFilenameTemplates()
+        self._createIterTemplates()
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -86,6 +95,13 @@ class CistemProtRefine2D(em.ProtClassify2D):
                       condition='doContinue', allowsNull=True,
                       label='Select previous run',
                       help='Select a previous run to continue from.')
+        form.addParam('continueIter', StringParam, default='last',
+                      condition='doContinue',
+                      label='Continue from iteration',
+                      help='Select from which iteration do you want to '
+                           'continue. If you use *last*, then the last '
+                           'iteration will be used. Otherwise, a valid '
+                           'iteration number should be provided.')
         form.addParam('inputParticles', PointerParam,
                       label="Input particles",
                       condition='not doContinue',
@@ -100,10 +116,11 @@ class CistemProtRefine2D(em.ProtClassify2D):
                       help='Select starting class averages. If not provided, '
                            'they will be generated automatically.')
         form.addParam('areParticlesBlack', BooleanParam,
-                       default=False,
-                       label='Are the particles black?',
-                       help='cisTEM requires particles to be black on white.')
+                      default=False,
+                      label='Are the particles black?',
+                      help='cisTEM requires particles to be black on white.')
         form.addParam('numberOfClassAvg', IntParam, default=5,
+                      condition='not doContinue',
                       label='Number of classes',
                       help='The number of classes that should be generated. '
                            'This input is only available when starting a '
@@ -243,10 +260,11 @@ class CistemProtRefine2D(em.ProtClassify2D):
     def _insertContinueStep(self):
         if self.doContinue:
             continueRun = self.continueRun.get()
+            continueRun._initialize()
             self.inputParticles.set(None)
             self.numberOfClassAvg.set(continueRun.numberOfClassAvg.get())
             if self.continueIter.get() == 'last':
-                self.initIter = continueRun._getCurrIter()
+                self.initIter = continueRun._lastIter() + 1
             else:
                 self.initIter = int(self.continueIter.get()) + 1
             self._insertFunctionStep('continueStep', self.initIter)
@@ -289,62 +307,69 @@ class CistemProtRefine2D(em.ProtClassify2D):
     def continueStep(self, iterN):
         """Create a symbolic link of a previous iteration from a previous run."""
         iterN = iterN - 1
-        self._setLastIter(iterN)
         continueRun = self.continueRun.get()
-        prevDir = continueRun._iterWorkingDir(iterN)
-        currDir = self._iterWorkingDir(iterN)
-        createLink(prevDir, currDir)
-
-        imgFn = self._getFileName('particles')
-        self.writeParticlesByMic(imgFn)
+        self._createWorkingDirs()
+        # link particles
+        prevStack = continueRun._getFileName('run_stack', run=0)
+        currStack = self._getFileName('run_stack', run=0)
+        createLink(continueRun._getExtraPath(prevStack),
+                   self._getExtraPath(currStack))
+        # link params & cls
+        for fn in ['iter_par', 'iter_cls']:
+            prevParam = continueRun._getFileName(fn, iter=iterN)
+            currParam = self._getFileName(fn, iter=iterN)
+            createLink(continueRun._getExtraPath(prevParam),
+                       self._getExtraPath(currParam))
 
     def convertInputStep(self):
-        self._createWorkingDirs()
-        inputStack = self._getFileName('run_stack', run=0)
-        inputClasses = self._getFileName('initial_cls')
-        imgFn = self._getExtraPath(inputStack)
-        self.writeParticlesByMic(imgFn)
-        inputCls = self.inputClassAvg.get() if self.inputClassAvg else None
+        if not self.doContinue:
+            self._createWorkingDirs()
+            inputStack = self._getFileName('run_stack', run=0)
+            inputClasses = self._getFileName('initial_cls')
+            imgFn = self._getExtraPath(inputStack)
+            self.writeParticlesByMic(imgFn)
+            inputCls = self.inputClassAvg.get() if self.inputClassAvg else None
 
-        if inputCls is not None:
-            writeReferences(self.inputClassAvg.get(),
-                            self._getExtraPath(inputClasses))
+            if inputCls is not None:
+                writeReferences(self.inputClassAvg.get(),
+                                self._getExtraPath(inputClasses))
+        else:
+            pass
 
     def writeInitParStep(self):
         """ Construct a parameter file (.par). """
         #  This function will be called only for iterations 1 and 2.
         parFn = self._getExtraPath(self._getFileName('iter_par', iter=1))
-        f = open(parFn, 'w')
-        f.write("C           PSI   THETA     PHI       SHX       SHY     MAG  "
-                "FILM      DF1      DF2  ANGAST  PSHIFT     OCC      LogP"
-                "      SIGMA   SCORE  CHANGE\n")
-        hasAlignment = self.hasAlignment()
+        with open(parFn, 'w') as f:
+            f.write("C           PSI   THETA     PHI       SHX       SHY     MAG  "
+                    "FILM      DF1      DF2  ANGAST  PSHIFT     OCC      LogP"
+                    "      SIGMA   SCORE  CHANGE\n")
+            hasAlignment = self.hasAlignment()
 
-        for i, part in self.iterParticlesByMic():
-            ctf = part.getCTF()
-            defocusU, defocusV, astig = ctf.getDefocusU(), ctf.getDefocusV(),\
-                                        ctf.getDefocusAngle()
-            phaseShift = ctf.getPhaseShift() or 0.00
+            for i, part in self.iterParticlesByMic():
+                ctf = part.getCTF()
+                defocusU, defocusV = ctf.getDefocusU(), ctf.getDefocusV()
+                astig = ctf.getDefocusAngle()
+                phaseShift = ctf.getPhaseShift() or 0.00
 
-            if hasAlignment:
-                _, angles = geometryFromMatrix(part.getTransform().getMatrix())
-                psi = angles[2]
-            else:
-                psi = 0.0
+                if hasAlignment:
+                    _, angles = geometryFromMatrix(part.getTransform().getMatrix())
+                    psi = angles[2]
+                else:
+                    psi = 0.0
 
-            string = '%7d%8.2f%8.2f%8.2f%10.2f%10.2f%8d%6d%9.1f%9.1f'\
-                     '%8.2f%8.2f%8.2f%10d%11.4f%8.2f%8.2f\n' % (
-                i + 1, psi, 0., 0., 0., 0., 0, 0, defocusU, defocusV,
-                astig, phaseShift, 100., 0, 10., 0., 0.)
+                string = '%7d%8.2f%8.2f%8.2f%10.2f%10.2f%8d%6d%9.1f%9.1f' \
+                         '%8.2f%8.2f%8.2f%10d%11.4f%8.2f%8.2f\n' % (
+                             i + 1, psi, 0., 0., 0., 0., 0, 0, defocusU, defocusV,
+                             astig, phaseShift, 100., 0, 10., 0., 0.)
 
-            f.write(string)
-        f.close()
+                f.write(string)
 
     def makeInitClassesStep(self, paramsDic):
         argsStr = self._getRefineArgs()
 
         percUsed = self.numberOfClassAvg.get() * 300.0
-        percUsed = percUsed / self._getPtclsNumber()  * 100.0
+        percUsed = percUsed / self._getPtclsNumber() * 100.0
         if percUsed > 100.0:
             percUsed = 100.0
 
@@ -438,18 +463,66 @@ class CistemProtRefine2D(em.ProtClassify2D):
         errors = []
 
         if self.doContinue:
-            errors.append('Continue mode not implemented yet!')
+            continueProtocol = self.continueRun.get()
+            if (continueProtocol is not None and
+                    continueProtocol.getObjId() == self.getObjId()):
+
+                errors.append('In Scipion you must create a new cisTEM run')
+                errors.append('and select the continue option rather than')
+                errors.append('select continue from the same run.')
+                errors.append('')  # add a new line
+            errors += self._validateContinue()
+
+        return errors
+
+    def _validateContinue(self):
+        errors = []
+        continueRun = self.continueRun.get()
+        continueRun._initialize()
+        lastIter = continueRun._lastIter()
+
+        if self.continueIter.get() == 'last':
+            continueIter = lastIter
+        else:
+            continueIter = int(self.continueIter.get())
+
+        if continueIter > lastIter:
+            errors += ["You can continue only from the iteration %01d or less" % lastIter]
 
         return errors
 
     def _summary(self):
-        summary = []
-        if not hasattr(self, 'outputClasses'):
-            summary.append("Output classes not ready yet.")
+        self._initialize()
+        lastIter = self._lastIter()
+
+        if lastIter is not None:
+            iterMsg = 'Iteration %d' % lastIter
+            if self.hasAttribute('numberOfIterations'):
+                iterMsg += '/%d' % self._getnumberOfIters()
+        else:
+            iterMsg = 'No iterations finished yet.'
+
+        summary = [iterMsg]
+
+        if self.doContinue:
+            summary += self._summaryContinue()
         else:
             summary.append("Input Particles: %s" % self.getObjectTag('inputParticles'))
-            summary.append("Classified into *%d* classes." % self.numberOfClassAvg)
-            summary.append("Output set: %s" % self.getObjectTag('outputClasses'))
+        summary += self._summaryNormal()
+        return summary
+
+    def _summaryNormal(self):
+        summary = list()
+
+        summary.append("Classified into *%d* classes." % self.numberOfClassAvg)
+        summary.append("Output set: %s" % self.getObjectTag('outputClasses'))
+
+        return summary
+
+    def _summaryContinue(self):
+        summary = list()
+
+        summary.append("Continue from iteration %01d" % self._getContinueIter())
 
         return summary
 
@@ -477,6 +550,9 @@ class CistemProtRefine2D(em.ProtClassify2D):
         """ Iterate over iterations steps """
         for iterN in range(self.initIter, self.finalIter):
             yield iterN
+
+    def _getnumberOfIters(self):
+        return self._getContinueIter() + self.numberOfIterations.get()
 
     def _getInputParticlesPointer(self):
         if self.doContinue:
@@ -515,6 +591,22 @@ class CistemProtRefine2D(em.ProtClassify2D):
     def _lastIter(self):
         return self._getIterNumber(-1)
 
+    def _getContinueIter(self):
+        continueRun = self.continueRun.get()
+
+        if continueRun is not None:
+            continueRun._initialize()
+
+        if self.doContinue:
+            if self.continueIter.get() == 'last':
+                continueIter = continueRun._lastIter()
+            else:
+                continueIter = int(self.continueIter.get())
+        else:
+            continueIter = 0
+
+        return continueIter
+
     def _fillClassesFromIter(self, clsSet, iterN):
         params = {'orderBy': ['_micId', 'id'],
                   'direction': 'ASC'
@@ -535,10 +627,10 @@ class CistemProtRefine2D(em.ProtClassify2D):
         vals = OrderedDict(zip(HEADER_COLUMNS, row))
         item.setClassId(vals.get('FILM'))
         item.setTransform(rowToAlignment(vals, item.getSamplingRate()))
-        item._cistemLogP = em.Float(vals.get('LogP'))
-        item._cistemSigma = em.Float(vals.get('SIGMA'))
-        item._cistemOCC = em.Float(vals.get('OCC'))
-        item._cistemScore = em.Float(vals.get('SCORE'))
+        item._cistemLogP = Float(vals.get('LogP'))
+        item._cistemSigma = Float(vals.get('SIGMA'))
+        item._cistemOCC = Float(vals.get('OCC'))
+        item._cistemScore = Float(vals.get('SCORE'))
 
     def _updateClass(self, item):
         classId = item.getObjId()
@@ -548,14 +640,11 @@ class CistemProtRefine2D(em.ProtClassify2D):
 
     def _iterRows(self, iterN):
         filePar = self._getFileName('iter_par', iter=iterN)
-        f1 = open(self._getExtraPath(filePar))
-        for line in f1:
-            if not line.startswith("C"):
-                values = map(float, line.strip().split())
-
-                yield values
-
-        f1.close()
+        with open(self._getExtraPath(filePar)) as f1:
+            for line in f1:
+                if not line.startswith("C"):
+                    values = map(float, line.strip().split())
+                    yield values
 
     def iterParticlesByMic(self):
         """ Iterate the particles ordered by micrograph """
@@ -579,8 +668,8 @@ class CistemProtRefine2D(em.ProtClassify2D):
 
         # Prepare arguments to call refine2d
         paramsDic = {'input_stack': self._getFileName('run_stack', run=0),
-                     'input_params': self._getFileName('iter_par', iter=iterN-1),
-                     'input_cls': self._getFileName('iter_cls', iter=iterN-1),
+                     'input_params': self._getFileName('iter_par', iter=iterN - 1),
+                     'input_cls': self._getFileName('iter_cls', iter=iterN - 1),
                      'output_params': self._getFileName('iter_par', iter=iterN),
                      'output_cls': self._getFileName('iter_cls', iter=iterN),
                      'numberOfClassAvg': self.numberOfClassAvg.get(),
@@ -650,12 +739,12 @@ eof
         if numberOfBlocks != 1:
             f1 = open(outFn, 'w+')
             f1.write("C           PSI   THETA     PHI       SHX       SHY     MAG  "
-                "FILM      DF1      DF2  ANGAST  PSHIFT     OCC      LogP"
-                "      SIGMA   SCORE  CHANGE\n")
+                     "FILM      DF1      DF2  ANGAST  PSHIFT     OCC      LogP"
+                     "      SIGMA   SCORE  CHANGE\n")
             for block in range(1, numberOfBlocks + 1):
                 parFn = self._getFileName('iter_par_block', iter=iterN,
                                           block=block)
-                if not exists(parFn):
+                if not os.path.exists(parFn):
                     raise Exception("Error: file %s does not exist" % parFn)
                 f2 = open(parFn)
 
@@ -745,8 +834,6 @@ eof
                             percUsed = 30.0
                     else:
                         percUsed = 100.0
-        else:
-            percUsed = percUsed
         if percUsed < minPercUsed:
             percUsed = minPercUsed
 

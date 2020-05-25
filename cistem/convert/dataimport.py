@@ -27,11 +27,11 @@
 import os
 
 import pyworkflow.utils as pwutils 
-from pyworkflow.em.data import CTFModel
-from .convert import readCtfModel
+from pwem.objects import CTFModel, SetOfParticles
+from .convert import readCtfModel, readSetOfParticles
 
 
-class GrigorieffLabImportCTF():
+class GrigorieffLabImportCTF:
     """ Import CTF estimated with CTFFIND4. """
     def __init__(self, protocol):
         self.protocol = protocol
@@ -54,4 +54,51 @@ class GrigorieffLabImportCTF():
                     if psdFile.endswith('.ctf'):
                         psdFile += ':mrc'
                     ctf.setPsdFile(psdFile)
+                    return ctf
+
         return ctf
+
+
+class GrigorieffLabImportParticles:
+    """ Import particles from a Frealign refinement. """
+
+    def __init__(self, protocol, parFile, stackFile):
+        self.protocol = protocol
+        self.copyOrLink = self.protocol.getCopyOrLink()
+        self.parFile = parFile
+        self.stackFile = stackFile
+
+    def _setupSet(self, partSet):
+        self.protocol.setSamplingRate(partSet)
+        partSet.setIsPhaseFlipped(self.protocol.haveDataBeenPhaseFlipped.get())
+        self.protocol.fillAcquisition(partSet.getAcquisition())
+
+    def importParticles(self):
+        """ Import particles from Frealign.
+        Params:
+            parFile: the filename of the parameter file with the alignment in Frealign.
+            stackFile: single stack file with the images.
+        """
+        partSet = self.protocol._createSetOfParticles()
+        partSet.setObjComment('Particles imported from Frealign parfile:\n%s' % self.parFile)
+
+        # Create a local link to the input stack file
+        localStack = self.protocol._getExtraPath(os.path.basename(self.stackFile))
+        pwutils.createLink(self.stackFile, localStack)
+        # Create a temporary set only with location
+        tmpSet = SetOfParticles(filename=':memory:')
+        tmpSet.readStack(localStack)
+        self._setupSet(tmpSet)
+
+        # Update both samplingRate and acquisition with parameters
+        # selected in the protocol form
+        self._setupSet(partSet)
+        # Now read the alignment parameters from par file
+        readSetOfParticles(tmpSet, partSet, self.parFile)
+        partSet.setHasCTF(True)
+        # Register the output set of particles
+        self.protocol._defineOutputs(outputParticles=partSet)
+
+    def validateParticles(self):
+        errors = []
+        return errors
