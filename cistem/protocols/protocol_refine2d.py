@@ -45,6 +45,7 @@ from ..convert import (writeReferences, geometryFromMatrix,
                        rowToAlignment, HEADER_COLUMNS)
 
 
+
 class CistemProtRefine2D(ProtClassify2D):
     """ Protocol to run 2D classification in cisTEM. """
     _label = 'classify 2D'
@@ -465,6 +466,7 @@ class CistemProtRefine2D(ProtClassify2D):
             continueProtocol = self.continueRun.get()
             if (continueProtocol is not None and
                     continueProtocol.getObjId() == self.getObjId()):
+
                 errors.append('In Scipion you must create a new cisTEM run')
                 errors.append('and select the continue option rather than')
                 errors.append('select continue from the same run.')
@@ -499,6 +501,7 @@ class CistemProtRefine2D(ProtClassify2D):
                 iterMsg += '/%d' % self._getnumberOfIters()
         else:
             iterMsg = 'No iterations finished yet.'
+
         summary = [iterMsg]
 
         if self.doContinue:

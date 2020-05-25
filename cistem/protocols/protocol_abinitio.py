@@ -31,6 +31,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam,
 from pwem.protocols import ProtInitialVolume
 
 
+
 class CistemProtAbInitio(ProtInitialVolume):
     """ Protocol to run ab-initio reconstruction in cisTEM. """
     _label = 'ab-initio'

@@ -36,6 +36,7 @@ from ..constants import CTFFIND4_BIN
 from ..convert import parseCtffind4Output, readCtfModel
 
 
+
 class ProgramCtffind:
     """
     Wrapper of Ctffind4 program that will handle parameters definition
