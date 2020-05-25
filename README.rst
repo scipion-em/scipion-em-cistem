@@ -6,12 +6,13 @@ cisTEM plugin
 
 This plugin provide wrappers around several programs of `cisTEM <https://cistem.org>`_ software suite.
 
-+------------------+------------------+
-| stable: |stable| | devel: | |devel| |
-+------------------+------------------+
++--------------+----------------+--------------------+
+| prod: |prod| | devel: |devel| | support: |support| |
++--------------+----------------+--------------------+
 
-.. |stable| image:: http://scipion-test.cnb.csic.es:9980/badges/cistem_sdevel.svg
-.. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/cistem_sdevel.svg
+.. |prod| image:: http://scipion-test.cnb.csic.es:9980/badges/cistem_prod.svg
+.. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/cistem_devel.svg
+.. |support| image:: http://scipion-test.cnb.csic.es:9980/badges/cistem_support.svg
 
 
 Installation
