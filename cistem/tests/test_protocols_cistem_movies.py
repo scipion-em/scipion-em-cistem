@@ -25,12 +25,12 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import *
 from pyworkflow.tests import *
+from pwem.protocols import ProtImportMovies
+from pyworkflow.utils import magentaStr
 
-from .. import *
+from cistem import *
 from ..protocols import CistemProtUnblur
-
 
 
 class TestMoviesBase(BaseTest):
@@ -68,11 +68,13 @@ class TestMoviesBase(BaseTest):
 
 class TestUnblur(TestMoviesBase):
     def test_movies(self):
+        print(magentaStr("\n==> Importing data - movies:"))
         protImport = self.runImportMovies()
         outputMovies = getattr(protImport, 'outputMovies', None)
         self.assertIsNotNone(outputMovies)
 
         inputMovies = protImport.outputMovies
+        print(magentaStr("\n==> Testing cistem - unblur:"))
         prot = self.newProtocol(CistemProtUnblur,
                                 alignFrame0=2,
                                 alignFrameN=6)

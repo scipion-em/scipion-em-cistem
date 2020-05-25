@@ -24,7 +24,8 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.wizard import *
+from pwem.wizards import *
+from pwem.constants import UNIT_ANGSTROM
 
 from .protocols import CistemProtCTFFind
 
@@ -71,7 +72,3 @@ class CistemCTFWizard(CtfWizard):
             dialog.showWarning("Empty input",
                                "Select elements first",
                                form.root)
-    
-    @classmethod    
-    def getView(cls):
-        return "wiz_ctf"

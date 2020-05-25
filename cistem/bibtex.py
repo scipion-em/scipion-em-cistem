@@ -88,7 +88,7 @@ doi = "http://dx.doi.org/10.1016/j.jsb.2015.08.008",
 url = "http://www.sciencedirect.com/science/article/pii/S1047847715300460",
 }
 
-@Article{Sigworth2004,
+@article{Sigworth2004,
 title = "Classical detection theory and the cryo-EM particle selection problem",
 journal = "Journal of Structural Biology",
 volume = "145",
@@ -130,16 +130,16 @@ keywords = "maximum-likelihood, multi-reference refinement, single-particles, 2D
 }
 
 @article{Liang2015,
-doi = {10.1016/j.cell.2015.06.018},
-url = {http://doi.org/10.1016/j.cell.2015.06.018},
-year = {2015},
-month = jul,
-volume = {162},
-number = {2},
-pages = {314--327},
-author = {Bo Liang and Zongli Li and Simon Jenni and Amal A. Rahmeh and Benjamin M. Morin and Timothy Grant and Nikolaus Grigorieff and Stephen C. Harrison and Sean P.J. Whelan},
-title = {Structure of the L Protein of Vesicular Stomatitis Virus from Electron Cryomicroscopy},
-journal = {Cell}
+doi = "10.1016/j.cell.2015.06.018",
+url = "http://doi.org/10.1016/j.cell.2015.06.018",
+year = "2015",
+month = "jul",
+volume = "162",
+number = "2",
+pages = "314-327",
+author = "Bo Liang and Zongli Li and Simon Jenni and Amal A. Rahmeh and Benjamin M. Morin and Timothy Grant and Nikolaus Grigorieff and Stephen C. Harrison and Sean P.J. Whelan",
+title = "Structure of the L Protein of Vesicular Stomatitis Virus from Electron Cryomicroscopy",
+journal = "Cell"
 }
 
 @article{Grigorieff2016,

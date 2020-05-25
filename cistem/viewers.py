@@ -26,11 +26,11 @@
 
 from pyworkflow.protocol.params import LabelParam
 from pyworkflow.utils import removeExt, cleanPath
-from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, ProtocolViewer
-from pyworkflow.em import SetOfMovies
-from pyworkflow.em.viewers import CtfView, EmPlotter, MicrographsView
-import pyworkflow.em.viewers.showj as showj
+from pyworkflow.viewer import DESKTOP_TKINTER, Viewer
 from pyworkflow.gui.project import ProjectWindow
+from pwem.viewers import CtfView, EmPlotter, MicrographsView, EmProtocolViewer
+import pwem.viewers.showj as showj
+from pwem.objects import SetOfMovies
 
 from .protocols import CistemProtCTFFind, CistemProtUnblur
 
@@ -39,26 +39,67 @@ def createCtfPlot(ctfSet, ctfId):
     ctfModel = ctfSet[ctfId]
     psdFn = ctfModel.getPsdFile()
     fn = removeExt(psdFn) + "_avrot.txt"
-    gridsize = [1, 1]
-    xplotter = EmPlotter(x=gridsize[0], y=gridsize[1],
-                         windowTitle='CTF Fitting')
-    plot_title = "CTF Fitting"
-    a = xplotter.createSubPlot(plot_title, 'pixels^-1', 'CTF',
+    xplotter = EmPlotter(windowTitle='CTFFind results')
+    plot_title = getPlotSubtitle(ctfModel)
+    a = xplotter.createSubPlot(plot_title, 'Spacial frequency (1/A)',
+                               'Amplitude (or cross-correlation)',
                                yformat=False)
-    
-    legendName = ['rotational avg. No Astg',
-                  'rotational avg.',
+    legendName = ['Amplitude spectrum',
                   'CTF Fit',
-                  'Cross Correlation',
-                  '2sigma cross correlation of noise']
-    for i in range(1, 6):
-        _plotCurve(a, i, fn)
-    xplotter.showLegend(legendName)
+                  'Quality of fit']
+    _plotCurves(a, fn)
+    xplotter.showLegend(legendName, loc='upper right')
+    a.set_ylim([-0.1, 1.1])
     a.grid(True)
     xplotter.show()
 
 
-OBJCMD_CTFFIND4 = "Display Ctf Fitting"
+def getPlotSubtitle(ctf):
+    ang = u"\u212B"
+    deg = u"\u00b0"
+    def1, def2, angle = ctf.getDefocus()
+    phSh = ctf.getPhaseShift()
+    score = ctf.getFitQuality()
+    res = ctf.getResolution()
+
+    title = "Def1: %d %s | Def2: %d %s | Angle: %0.1f%s | " % (
+        def1, ang, def2, ang, angle, deg)
+
+    if phSh is not None:
+        title += "Phase shift: %0.2f %s | " % (phSh, deg)
+
+    title += "Fit: %0.1f %s | Score: %0.3f" % (res, ang, score)
+
+    return title
+
+
+def _plotCurves(a, fn):
+    res = _getValues(fn)
+    for y in ['amp', 'fit', 'quality']:
+        a.plot(res['freq'], res[y])
+
+
+def _getValues(fn):
+    res = dict()
+    with open(fn) as f:
+        i = 0
+        for line in f:
+            line = line.strip()
+            if not line.startswith("#"):
+                if i == 0:
+                    res['freq'] = [float(x) for x in line.split()]
+                elif i == 2:
+                    res['amp'] = [float(x) for x in line.split()]
+                elif i == 3:
+                    res['fit'] = [float(x) for x in line.split()]
+                elif i == 4:
+                    res['quality'] = [float(x) for x in line.split()]
+                    break
+                i += 1
+    return res
+
+
+OBJCMD_CTFFIND4 = "CTFFind plot results"
 
 ProjectWindow.registerObjectCommand(OBJCMD_CTFFIND4, createCtfPlot)
 
@@ -81,27 +122,7 @@ class CtffindViewer(Viewer):
                                      "produced", "Missing output")]
 
 
-def _plotCurve(a, i, fn):
-    freqs = _getValues(fn, 0)
-    curv = _getValues(fn, i)
-    a.plot(freqs, curv)
-
-
-def _getValues(fn, row):
-    f = open(fn)
-    values = []
-    i = 0
-    for line in f:
-        if not line.startswith("#"):
-            if i == row:
-                values = line.split()
-                break
-            i += 1
-    f.close()
-    return values
-
-
-class ProtUnblurViewer(ProtocolViewer):
+class ProtUnblurViewer(EmProtocolViewer):
     _targets = [CistemProtUnblur]
     _environments = [DESKTOP_TKINTER]
 
@@ -184,7 +205,6 @@ class ProtUnblurViewer(ProtocolViewer):
         movieSet.copyInfo(inputMovies)
         movieSet.copyItems(inputMovies,
                            updateItemCallback=self._findFailedMovies)
-
         movieSet.write()
         movieSet.close()
 

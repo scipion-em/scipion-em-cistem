@@ -26,7 +26,7 @@
 
 import os
 
-import pyworkflow.em
+import pwem
 import pyworkflow.utils as pwutils
 
 from .constants import *
@@ -36,7 +36,7 @@ _logo = "cistem_logo.png"
 _references = ['Grant2018']
 
 
-class Plugin(pyworkflow.em.Plugin):
+class Plugin(pwem.Plugin):
     _homeVar = CISTEM_HOME
     _pathVars = [CISTEM_HOME]
     _supportedVersions = [V1_0_0]
@@ -44,6 +44,7 @@ class Plugin(pyworkflow.em.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(CISTEM_HOME, 'cistem-1.0.0-beta')
+        cls._defineEmVar(CTFFIND4_HOME, 'ctffind4-4.1.13')
 
     @classmethod
     def getEnviron(cls):
@@ -57,11 +58,15 @@ class Plugin(pyworkflow.em.Plugin):
     @classmethod
     def getProgram(cls, program):
         """ Return the program binary that will be used. """
-        binary = os.path.join(cls.getHome(), program)
         if program == CTFFIND4_BIN:
-            # if CTFFIND4_HOME is defined, use it
-            path = os.environ.get(CTFFIND4_HOME, None) or cls.getHome()
-            binary = os.path.join(path, program)
+            # if CTFFIND4_HOME is found, use it
+            path = cls.getVar(CTFFIND4_HOME, None)
+            if os.path.exists(path):
+                binary = os.path.join(path, 'bin', program)
+            else:
+                binary = os.path.join(cls.getHome(), program)
+        else:
+            binary = os.path.join(cls.getHome(), program)
 
         return binary
 
@@ -69,17 +74,7 @@ class Plugin(pyworkflow.em.Plugin):
     def defineBinaries(cls, env):
         env.addPackage('cistem', version='1.0.0-beta',
                        url='"https://cistem.org/system/tdf/upload3/cistem-1.0.0'
-                           '-beta-intel-linux.tar.gz?file=1&type=cistem_details'
-                           '&id=37&force=0&s3fs=1"',
+                       '-beta-intel-linux.tar.gz?file=1&type=cistem_details&id=37&force=0"',
                        default=True)
-
-        try:
-            # If grigoriefflab is installed we do not define again ctfind4-4.1.13
-            import grigoriefflab
-
-        except ImportError:
-            env.addPackage('ctffind4', version='4.1.13',
-                           tar='ctffind4-4.1.13.tgz')
-
-
-pyworkflow.em.Domain.registerPlugin(__name__)
+        env.addPackage('ctffind4', version='4.1.13',
+                       tar='ctffind4-4.1.13.tgz')
