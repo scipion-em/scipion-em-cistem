@@ -108,6 +108,9 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         if self.inputType == 0:
             errors.append('Movie CTF estimation is not ready yet.')
 
+        if self.lowRes.get() > 50:
+            errors.append("Minimum resolution cannot be > 50A.")
+
         valueStep = round(self.stepPhaseShift.get(), 2)
         valueMin = round(self.minPhaseShift.get(), 2)
         valueMax = round(self.maxPhaseShift.get(), 2)

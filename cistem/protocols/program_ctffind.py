@@ -202,12 +202,12 @@ class ProgramCtffind:
     def _getArgs(self, protocol):
         # Update first the params dict
         paramDict = protocol.getCtfParamsDict()
-        if paramDict['lowRes'] > 50:
-            paramDict['lowRes'] = 50
         paramDict['step_focus'] = protocol.stepDefocus.get()
         paramDict['fixAstig'] = "yes" if protocol.fixAstig else "no"
         paramDict['astigmatism'] = protocol.astigmatism.get()
         paramDict['lowRes'] = protocol.lowRes.get()
+        if paramDict['lowRes'] > 50:
+            paramDict['lowRes'] = 50
         paramDict['highRes'] = protocol.highRes.get()
         # defocus is in Angstroms now
         paramDict['minDefocus'] = protocol.minDefocus.get()
