@@ -83,7 +83,19 @@ class CistemProtCTFFind(ProtCTFMicrographs):
             pwutils.cleanPath(micDir)
 
         except Exception as ex:
-            print("ERROR: Ctffind has failed for %s" % micFnMrc)
+            print("ERROR: Ctffind has failed for %s. %s" % (micFnMrc, self._getErrorFromCtffindTxt(mic)))
+
+    def _getErrorFromCtffindTxt(self, mic):
+        try:
+            file = self._getCtfOutPath(mic)
+            with open(file, "r") as fh:
+                for line in fh.readlines():
+                    if line.startswith("Error"):
+                        return line.replace("Error:", "")
+
+            return "No Error line found on %s" % file
+        except Exception as e:
+            return "Can't parse ctffind output file (%s) for errors: %s" % (file, e)
 
     def _estimateCTF(self, mic, *args):
         self._doCtfEstimation(mic)
