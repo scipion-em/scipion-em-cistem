@@ -44,7 +44,7 @@ class Plugin(pwem.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(CISTEM_HOME, 'cistem-1.0.0-beta')
-        cls._defineEmVar(CTFFIND4_HOME, 'ctffind4-4.1.13')
+        cls._defineEmVar(CTFFIND4_HOME, 'ctffind4-4.1.14')
 
     @classmethod
     def getEnviron(cls):
@@ -78,3 +78,5 @@ class Plugin(pwem.Plugin):
                        default=True)
         env.addPackage('ctffind4', version='4.1.13',
                        tar='ctffind4-4.1.13.tgz')
+        env.addPackage('ctffind4', version='4.1.14',
+                       tar='ctffind4-4.1.14.tgz')
