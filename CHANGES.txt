@@ -1,3 +1,4 @@
+3.0.7 - minor fixes
 3.0.6 - add ctffind4 4.1.14 binaries
 3.0.5 - fix picking bug in streaming
 3.0.4 - add validation for min resolution
