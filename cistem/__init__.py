@@ -34,6 +34,7 @@ from .constants import *
 
 _logo = "cistem_logo.png"
 _references = ['Grant2018']
+_url = "https://github.com/scipion-em/scipion-em-cistem"
 
 
 class Plugin(pwem.Plugin):
