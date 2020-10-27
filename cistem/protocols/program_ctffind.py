@@ -36,7 +36,6 @@ from ..constants import CTFFIND4_BIN
 from ..convert import parseCtffind4Output, readCtfModel
 
 
-
 class ProgramCtffind:
     """
     Wrapper of Ctffind4 program that will handle parameters definition
@@ -81,11 +80,17 @@ class ProgramCtffind:
                            'enter how many frames should be included '
                            'in the sub-averages used to calculate '
                            'the amplitude spectra.')
+        form.addParam('usePowerSpectra', params.BooleanParam, default=False,
+                      condition='not recalculate and inputType==1',
+                      label="Use power spectra?",
+                      help="If set to Yes, the CTF estimation will be done "
+                           "using power spectra calculated during "
+                           "Relion motion correction.")
 
     @classmethod
     def defineProcessParams(cls, form):
         form.addParam('windowSize', params.IntParam, default=512,
-                      label='Box size (px)', condition='not recalculate',
+                      label='FFT box size (px)', condition='not recalculate',
                       help='The dimensions (in pixels) of the amplitude '
                            'spectrum CTFfind will compute. Smaller box '
                            'sizes make the fitting process significantly '
@@ -111,7 +116,7 @@ class ProgramCtffind:
                       label='Min')
         line.addParam('maxDefocus', params.FloatParam, default=50000.,
                       label='Max')
-        group.addParam('stepDefocus', params.FloatParam, default=100.,
+        group.addParam('stepDefocus', params.FloatParam, default=500.,
                        label='Defocus step (A)',
                        help='Step size for the defocus search.')
 
@@ -124,7 +129,7 @@ class ProgramCtffind:
                             "or if you expect noticably elliptical Thon "
                             "rings and high noise.")
 
-        group.addParam('fixAstig', params.BooleanParam, default=False,
+        group.addParam('fixAstig', params.BooleanParam, default=True,
                        label='Restrain astigmatism?',
                        expertLevel=params.LEVEL_ADVANCED,
                        help='Should the amount of astigmatism be restrained '
@@ -134,7 +139,7 @@ class ProgramCtffind:
                             'fits. Disable this option if you expect '
                             'large astigmatism.')
         group.addParam('astigmatism', params.FloatParam,
-                       default=500.0, condition='fixAstig',
+                       default=100.0, condition='fixAstig',
                        label='Tolerated astigmatism (A)',
                        expertLevel=params.LEVEL_ADVANCED,
                        help='When restraining astigmatism, astigmatism values '
@@ -244,10 +249,16 @@ no
 eof\n
 """
 
+        if protocol.usePowerSpectra:
+            args = args.replace('<< eof > %(ctffindOut)s',
+                                '--amplitude-spectrum-input << eof > %(ctffindOut)s')
+            args = args.replace('%(samplingRate)f',
+                                '%(powerSpectraPix)f')
+
         if protocol.fixAstig:
             args = args.replace('%(fixAstig)s',
                                 '%(fixAstig)s\n'
-                                '%(astigmatism)f\n')
+                                '%(astigmatism)f')
 
         if self._findPhaseShift:
             args = args.replace('%(phaseShift)s',
