@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-from pwem.wizards import *
+from pwem.wizards import CtfWizard, CtfDialog, dialog
 from pwem.constants import UNIT_ANGSTROM
 
 from .protocols import CistemProtCTFFind
@@ -34,7 +34,6 @@ class CistemCTFWizard(CtfWizard):
     _targets = [(CistemProtCTFFind, ['lowRes', 'highRes'])]
     
     def _getParameters(self, protocol):
-        
         label, value = self._getInputProtocol(self._targets,
                                               protocol)
         protParams = dict()

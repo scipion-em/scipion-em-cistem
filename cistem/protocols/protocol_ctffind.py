@@ -59,7 +59,12 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     # -------------------------- STEPS functions ------------------------------
     def _doCtfEstimation(self, mic, **kwargs):
         """ Run ctffind with required parameters """
-        micFn = mic.getFileName()
+        if self.usePowerSpectra:
+            micFn = mic._powerSpectra.getFileName()
+            powerSpectraPix = self._getPsSampling()
+        else:
+            micFn = mic.getFileName()
+            powerSpectraPix = None
         micDir = self._getTmpPath('mic_%06d' % mic.getObjId())
         # Create micrograph dir
         pwutils.makePath(micDir)
@@ -75,6 +80,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         try:
             program, args = self._ctfProgram.getCommand(
                 micFn=micFnMrc,
+                powerSpectraPix=powerSpectraPix,
                 ctffindOut=self._getCtfOutPath(mic),
                 ctffindPSD=self._getPsdPath(mic),
                 **kwargs)
@@ -119,7 +125,12 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     def _validate(self):
         errors = []
         if self.inputType == 0:
-            errors.append('Movie CTF estimation is not ready yet.')
+            errors.append('Movie CTF estimation is not supported yet.')
+
+        if self.usePowerSpectra:
+            mic = self._getFirstMic()
+            if not hasattr(mic, "_powerSpectra"):
+                errors.append("Input micrographs do not have associated power spectra.")
 
         if self.lowRes.get() > 50:
             errors.append("Minimum resolution cannot be > 50A.")
@@ -188,3 +199,10 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         ctf.setPsdFile(psdFile)
 
         return ctf
+
+    def _getFirstMic(self):
+        """ Get first mic in the input set only once. """
+        return self.getInputMicrographs().getFirstItem()
+
+    def _getPsSampling(self):
+        return self._getFirstMic()._powerSpectra.getSamplingRate()
