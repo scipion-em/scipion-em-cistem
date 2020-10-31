@@ -6,6 +6,27 @@ cisTEM plugin
 
 This plugin provide wrappers around several programs of `cisTEM <https://cistem.org>`_ software suite.
 
+.. image:: https://img.shields.io/pypi/v/scipion-em-cistem.svg
+        :target: https://pypi.python.org/pypi/scipion-em-cistem
+        :alt: PyPI release
+
+.. image:: https://img.shields.io/pypi/l/scipion-em-cistem.svg
+        :target: https://pypi.python.org/pypi/scipion-em-cistem
+        :alt: License
+
+.. image:: https://img.shields.io/pypi/pyversions/scipion-em-cistem.svg
+        :target: https://pypi.python.org/pypi/scipion-em-cistem
+        :alt: Supported Python versions
+
+.. image:: https://img.shields.io/sonar/quality_gate/scipion-em_scipion-em-cistem?server=https%3A%2F%2Fsonarcloud.io
+        :target: https://sonarcloud.io/dashboard?id=scipion-em_scipion-em-cistem
+        :alt: SonarCloud quality gate
+
+.. image:: https://img.shields.io/pypi/dm/scipion-em-cistem
+        :target: https://pypi.python.org/pypi/scipion-em-cistem
+        :alt: Downloads
+
+
 +--------------+----------------+--------------------+
 | prod: |prod| | devel: |devel| | support: |support| |
 +--------------+----------------+--------------------+
