@@ -157,7 +157,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         methods = []
         if self.inputMicrographs.get() is not None:
             methods.append("We calculated the CTF of %s using CTFFind. "
-                       % self.getObjectTag('inputMicrographs'))
+                           % self.getObjectTag('inputMicrographs'))
             methods.append(self.methodsVar.get(''))
             if getattr(self, 'outputCTF'):
                 methods.append('Output CTFs: %s' % self.getObjectTag('outputCTF'))
