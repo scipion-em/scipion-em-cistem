@@ -1,3 +1,4 @@
+3.0.8 - add calculate from amplitude spectra option, update default values
 3.0.7 - minor fixes
 3.0.6 - add ctffind4 4.1.14 binaries
 3.0.5 - fix picking bug in streaming

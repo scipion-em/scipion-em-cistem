@@ -45,7 +45,6 @@ from ..convert import (writeReferences, geometryFromMatrix,
                        rowToAlignment, HEADER_COLUMNS)
 
 
-
 class CistemProtRefine2D(ProtClassify2D):
     """ Protocol to run 2D classification in cisTEM. """
     _label = 'classify 2D'
