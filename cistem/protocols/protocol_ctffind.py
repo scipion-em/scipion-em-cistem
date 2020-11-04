@@ -61,7 +61,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         """ Run ctffind with required parameters """
         if self.usePowerSpectra:
             micFn = mic._powerSpectra.getFileName()
-            powerSpectraPix = self._getPsSampling()
+            powerSpectraPix = self.psSampling
         else:
             micFn = mic.getFileName()
             powerSpectraPix = None
@@ -131,6 +131,8 @@ class CistemProtCTFFind(ProtCTFMicrographs):
             mic = self._getFirstMic()
             if not hasattr(mic, "_powerSpectra"):
                 errors.append("Input micrographs do not have associated power spectra.")
+            else:
+                self.psSampling = mic._powerSpectra.getSamplingRate()
 
         if self.lowRes.get() > 50:
             errors.append("Minimum resolution cannot be > 50A.")
@@ -203,6 +205,3 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     def _getFirstMic(self):
         """ Get first mic in the input set only once. """
         return self.getInputMicrographs().getFirstItem()
-
-    def _getPsSampling(self):
-        return self._getFirstMic()._powerSpectra.getSamplingRate()
