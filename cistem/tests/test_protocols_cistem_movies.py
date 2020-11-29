@@ -25,7 +25,7 @@
 # *
 # **************************************************************************
 
-from pyworkflow.tests import *
+from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pwem.protocols import ProtImportMovies
 from pyworkflow.utils import magentaStr
 

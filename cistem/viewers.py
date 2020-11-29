@@ -36,6 +36,7 @@ from .protocols import CistemProtCTFFind, CistemProtUnblur
 
 
 def createCtfPlot(ctfSet, ctfId):
+    """ Create EmPlotter instance. """
     ctfModel = ctfSet[ctfId]
     psdFn = ctfModel.getPsdFile()
     fn = removeExt(psdFn) + "_avrot.txt"
@@ -55,6 +56,7 @@ def createCtfPlot(ctfSet, ctfId):
 
 
 def getPlotSubtitle(ctf):
+    """ Create plot subtitle using CTF values. """
     ang = u"\u212B"
     deg = u"\u00b0"
     def1, def2, angle = ctf.getDefocus()
@@ -74,12 +76,14 @@ def getPlotSubtitle(ctf):
 
 
 def _plotCurves(a, fn):
+    """ Actually plot the curves. """
     res = _getValues(fn)
     for y in ['amp', 'fit', 'quality']:
         a.plot(res['freq'], res[y])
 
 
 def _getValues(fn):
+    """ Parse input file and return a dict with results. """
     res = dict()
     with open(fn) as f:
         i = 0

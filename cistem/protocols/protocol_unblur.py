@@ -46,10 +46,8 @@ from ..constants import UNBLUR_BIN
 
 
 class CistemProtUnblur(ProtAlignMovies):
-    """ This protocol wraps unblur movie alignment program.
+    """ This protocol wraps unblur movie alignment program. """
 
-    More information at https://cistem.org/documentation
-    """
     _label = 'unblur'
     CONVERT_TO_MRC = 'mrc'
 
@@ -191,7 +189,6 @@ class CistemProtUnblur(ProtAlignMovies):
         form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- STEPS functions -----------------------------
-
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
         movieFolder = self._getOutputMovieFolder(movie)
@@ -238,7 +235,7 @@ class CistemProtUnblur(ProtAlignMovies):
             else:
                 _extraWork()
 
-        except:
+        except RuntimeError:
             print("ERROR: Failed to align movie %s\n" % movie.getFileName())
 
     def _insertFinalSteps(self, deps):
@@ -285,6 +282,7 @@ class CistemProtUnblur(ProtAlignMovies):
 
     # --------------------------- UTILS functions -----------------------------
     def _getProgram(self):
+        """ Return program binary. """
         return Plugin.getProgram(UNBLUR_BIN)
 
     def _argsUnblur(self, movie):
@@ -479,7 +477,6 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     ax_ang2.set_ylabel('Shift y (A)')
 
     i = first
-    # by the program if dose filtering is required
     skipLabels = ceil(len(meanX)/10.0)
     labelTick = 1
 
@@ -500,7 +497,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     ax_px.plot(sumMeanX, sumMeanY, color='b')
     ax_px.plot(sumMeanX, sumMeanY, 'yo')
     ax_px.plot(sumMeanX[0], sumMeanY[0], 'ro', markersize=10, linewidth=0.5)
-    # ax_ang2.set_title('Full-frame alignment')
+    ax_px.set_title('Global frame alignment')
 
     plotter.tightLayout()
 

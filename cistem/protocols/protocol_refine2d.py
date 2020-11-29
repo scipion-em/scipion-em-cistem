@@ -74,9 +74,6 @@ class CistemProtRefine2D(ProtClassify2D):
         self._iterRegex = re.compile('input_par_(\d{1,2})')
 
     def _initialize(self):
-        """ This function is mean to be called after the
-        working dir for the protocol have been set. (maybe after recovery from mapper)
-        """
         self._createFilenameTemplates()
         self._createIterTemplates()
 
@@ -321,6 +318,8 @@ class CistemProtRefine2D(ProtClassify2D):
                        self._getExtraPath(currParam))
 
     def convertInputStep(self):
+        """ Prepare working dir, convert input particles
+        (write out by mic) and write input references stack. """
         if not self.doContinue:
             self._createWorkingDirs()
             inputStack = self._getFileName('run_stack', run=0)
@@ -332,12 +331,10 @@ class CistemProtRefine2D(ProtClassify2D):
             if inputCls is not None:
                 writeReferences(self.inputClassAvg.get(),
                                 self._getExtraPath(inputClasses))
-        else:
-            pass
 
     def writeInitParStep(self):
-        """ Construct a parameter file (.par). """
-        #  This function will be called only for iterations 1 and 2.
+        """ Construct a parameter file (.par).
+        This function will be called only for iterations 1 and 2. """
         parFn = self._getExtraPath(self._getFileName('iter_par', iter=1))
         with open(parFn, 'w') as f:
             f.write("C           PSI   THETA     PHI       SHX       SHY     MAG  "
@@ -366,7 +363,6 @@ class CistemProtRefine2D(ProtClassify2D):
 
     def makeInitClassesStep(self, paramsDic):
         argsStr = self._getRefineArgs()
-
         percUsed = self.numberOfClassAvg.get() * 300.0
         percUsed = percUsed / self._getPtclsNumber() * 100.0
         if percUsed > 100.0:
@@ -519,9 +515,7 @@ class CistemProtRefine2D(ProtClassify2D):
         return summary
 
     def _summaryContinue(self):
-        summary = list()
-
-        summary.append("Continue from iteration %01d" % self._getContinueIter())
+        summary = ["Continue from iteration %01d" % self._getContinueIter()]
 
         return summary
 
@@ -537,6 +531,7 @@ class CistemProtRefine2D(ProtClassify2D):
 
     # --------------------------- UTILS functions -----------------------------
     def _getProgram(self, program='refine2d'):
+        """ Return program binary. """
         return Plugin.getProgram(program)
 
     def _createWorkingDirs(self):
@@ -652,6 +647,7 @@ class CistemProtRefine2D(ProtClassify2D):
             yield i, part
 
     def writeParticlesByMic(self, stackFn):
+        """ Cistem requires input particle stack ordered by mic. """
         self._getInputParticles().writeStack(stackFn,
                                              orderBy=['_micId', 'id'],
                                              direction='ASC')
@@ -744,7 +740,7 @@ eof
                 parFn = self._getFileName('iter_par_block', iter=iterN,
                                           block=block)
                 if not os.path.exists(parFn):
-                    raise Exception("Error: file %s does not exist" % parFn)
+                    raise FileExistsError("Error: file %s does not exist" % parFn)
                 f2 = open(parFn)
 
                 for l in f2:

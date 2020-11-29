@@ -39,10 +39,9 @@ from .program_ctffind import ProgramCtffind
 
 
 class CistemProtCTFFind(ProtCTFMicrographs):
-    """
-    Estimates CTF for a set of micrographs/movies with ctffind4.
+    """ Estimate CTF for a set of micrographs with ctffind4.
     
-    To find more information about ctffind4 go to:
+    To find more information about ctffind4 visit:
     https://grigoriefflab.umassmed.edu/ctffind4
     """
     _label = 'ctffind4'
@@ -58,7 +57,10 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     # -------------------------- STEPS functions ------------------------------
     def _doCtfEstimation(self, mic, **kwargs):
-        """ Run ctffind with required parameters """
+        """ Run ctffind with required parameters.
+        :param mic: input mic object
+        :param kwargs: dict with arguments
+        """
         if self.usePowerSpectra:
             micFn = mic._powerSpectra.getFileName()
             powerSpectraPix = self.psSampling
@@ -73,7 +75,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         ih = emlib.image.ImageHandler()
 
         if not ih.existsLocation(micFn):
-            raise Exception("Missing input micrograph: %s" % micFn)
+            raise FileExistsError("Missing input micrograph: %s" % micFn)
 
         ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
 
@@ -88,12 +90,16 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
             pwutils.cleanPath(micDir)
 
-        except Exception as ex:
+        except RuntimeError:
             print("ERROR: Ctffind has failed for %s. %s" % (
                 micFnMrc,
                 self._getErrorFromCtffindTxt(mic)))
 
     def _getErrorFromCtffindTxt(self, mic):
+        """ Parse output log for errors.
+        :param mic: input mic object
+        :return: the error string
+        """
         file = self._getCtfOutPath(mic)
         try:
             with open(file, "r") as fh:
@@ -105,12 +111,15 @@ class CistemProtCTFFind(ProtCTFMicrographs):
             return "Can't parse output file (%s) for errors: %s" % (file, e)
 
     def _estimateCTF(self, mic, *args):
+        """ Redefined func from the base class. """
         self._doCtfEstimation(mic)
 
     def _reEstimateCTF(self, mic, ctf):
+        """ Redefined func from the base class. """
         self._doCtfEstimation(mic, **self._getRecalCtfParamsDict(ctf))
 
     def _createCtfModel(self, mic, updateSampling=False):
+        """ Redefined func from the base class. """
         psd = self._getPsdPath(mic)
         ctfModel = self._ctfProgram.parseOutputAsCtf(self._getCtfOutPath(mic),
                                                      psdFile=psd)
@@ -119,6 +128,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         return ctfModel
 
     def _createOutputStep(self):
+        """ Do nothing in streaming case. """
         pass
 
     # -------------------------- INFO functions -------------------------------
@@ -168,6 +178,9 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     # -------------------------- UTILS functions ------------------------------
     def _getRecalCtfParamsDict(self, ctfModel):
+        """ Update values from user-adjusted params from the Java GUI.
+        :param ctfModel: input CTF model object
+        """
         values = [float(x) for x in ctfModel.getObjComment().split()]
         sampling = self.inputMicrographs.get().getSamplingRate()
         return {
@@ -179,7 +192,10 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         }
 
     def _getMicExtra(self, mic, suffix):
-        """ Return a file in extra direction with root of micFn. """
+        """ Return a file in extra direction with root of micFn.
+        :param mic: input mic object
+        :param suffix: file extension
+        """
         return self._getExtraPath(pwutils.removeBaseExt(os.path.basename(
             mic.getFileName())) + '_' + suffix)
 
