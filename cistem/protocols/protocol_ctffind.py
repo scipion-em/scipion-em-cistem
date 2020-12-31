@@ -74,10 +74,13 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
         ih = emlib.image.ImageHandler()
 
-        if not ih.existsLocation(micFn):
+        if not pwutils.exists(micFn):
             raise FileExistsError("Missing input micrograph: %s" % micFn)
 
-        ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
+        if micFn.endswith('.mrc'):
+            pwutils.createAbsLink(os.path.abspath(micFn), micFnMrc)
+        else:
+            ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
 
         try:
             program, args = self._ctfProgram.getCommand(
@@ -90,25 +93,21 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
             pwutils.cleanPath(micDir)
 
-        except RuntimeError:
-            print("ERROR: Ctffind has failed for %s. %s" % (
-                micFnMrc,
-                self._getErrorFromCtffindTxt(mic)))
+        except Exception as e:
+            self.error("ERROR: Ctffind has failed for %s. %s" % (
+                micFnMrc, self._getErrorFromCtffindTxt(mic, e)))
 
-    def _getErrorFromCtffindTxt(self, mic):
+    def _getErrorFromCtffindTxt(self, mic, e):
         """ Parse output log for errors.
         :param mic: input mic object
         :return: the error string
         """
         file = self._getCtfOutPath(mic)
-        try:
-            with open(file, "r") as fh:
-                for line in fh.readlines():
-                    if line.startswith("Error"):
-                        return line.replace("Error:", "")
-            return ""
-        except Exception as e:
-            return "Can't parse output file (%s) for errors: %s" % (file, e)
+        with open(file, "r") as fh:
+            for line in fh.readlines():
+                if line.startswith("Error"):
+                    return line.replace("Error:", "")
+        return e
 
     def _estimateCTF(self, mic, *args):
         """ Redefined func from the base class. """
@@ -152,7 +151,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         valueMax = round(self.maxPhaseShift.get(), 2)
 
         if not (self.minPhaseShift < self.maxPhaseShift and
-                valueStep <= (valueMax-valueMin) and
+                valueStep <= (valueMax - valueMin) and
                 0. <= valueMax <= 180.):
             errors.append('Wrong values for phase shift search.')
 
@@ -160,10 +159,6 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     def _citations(self):
         return ["Mindell2003", "Rohou2015"]
-
-    def _summary(self):
-        summary = ProtCTFMicrographs._summary(self)
-        return summary
 
     def _methods(self):
         methods = []

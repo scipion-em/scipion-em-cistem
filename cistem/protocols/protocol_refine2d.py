@@ -302,7 +302,7 @@ class CistemProtRefine2D(ProtClassify2D):
     # --------------------------- STEPS functions -----------------------------
     def continueStep(self, iterN):
         """Create a symbolic link of a previous iteration from a previous run."""
-        iterN = iterN - 1
+        iterN -= 1
         continueRun = self.continueRun.get()
         self._createWorkingDirs()
         # link particles
@@ -378,7 +378,7 @@ class CistemProtRefine2D(ProtClassify2D):
         })
 
         cmdArgs = argsStr % paramsDic
-        self.runJob(self._getProgram('refine2d'), cmdArgs,
+        self.runJob(self._getProgram(), cmdArgs,
                     cwd=self._getExtraPath(),
                     env=Plugin.getEnviron())
 
@@ -422,7 +422,7 @@ class CistemProtRefine2D(ProtClassify2D):
         })
 
         cmdArgs = argsStr % paramsDic
-        self.runJob(self._getProgram('refine2d'), cmdArgs,
+        self.runJob(self._getProgram(), cmdArgs,
                     cwd=self._getExtraPath(),
                     env=Plugin.getEnviron())
 

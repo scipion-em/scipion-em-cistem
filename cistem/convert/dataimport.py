@@ -28,6 +28,7 @@ import os
 
 import pyworkflow.utils as pwutils 
 from pwem.objects import CTFModel, SetOfParticles
+
 from .convert import readCtfModel, readSetOfParticles
 
 
@@ -55,7 +56,7 @@ class GrigorieffLabImportCTF:
                            fnBase.replace('_ctffind4', '')]
             for prefix in psdPrefixes:
                 psdFile = prefix + suffix
-                if os.path.exists(psdFile):
+                if pwutils.exists(psdFile):
                     if psdFile.endswith('.ctf'):
                         psdFile += ':mrc'
                     ctf.setPsdFile(psdFile)
