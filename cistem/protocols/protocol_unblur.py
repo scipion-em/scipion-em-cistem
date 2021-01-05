@@ -84,8 +84,8 @@ class CistemProtUnblur(ProtAlignMovies):
         form.addParam('doComputePSD', params.BooleanParam, default=False,
                       expertLevel=params.LEVEL_ADVANCED,
                       label="Compute PSD?",
-                      help="If Yes, the protocol will compute for each movie "
-                           "the PSD after alignment using EMAN2.")
+                      help="If Yes, the protocol will compute for each "
+                           "aligned micrograph the PSD using EMAN2.")
         form.addParam('doComputeMicThumbnail', params.BooleanParam,
                       expertLevel=params.LEVEL_ADVANCED,
                       default=False,
@@ -205,7 +205,7 @@ class CistemProtUnblur(ProtAlignMovies):
                 self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
 
                 if self._doComputeMicThumbnail():
-                    self.computeThumbnail(outMicFn, scaleFactor=3,
+                    self.computeThumbnail(outMicFn,
                                           outputFn=self._getOutputMicThumbnail(movie))
 
             if self._useWorkerThread():
@@ -399,10 +399,11 @@ eof\n
     def _doComputeMicThumbnail(self):
         return self.doComputeMicThumbnail
 
-    def _computePSD(self, inputFn, outputFn, scaleFactor=3):
+    def _computePSD(self, inputFn, outputFn, scaleFactor=6):
         """ Generate a thumbnail of the PSD with EMAN2"""
         args = "%s %s " % (inputFn, outputFn)
-        args += "--process=math.realtofft --meanshrink %s" % scaleFactor
+        args += "--process=math.realtofft --meanshrink %s " % scaleFactor
+        args += "--fixintscaling=sane"
 
         from pwem import Domain
         eman2 = Domain.importFromPlugin('eman2')

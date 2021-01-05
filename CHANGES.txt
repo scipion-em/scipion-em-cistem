@@ -7,7 +7,7 @@
     - remove psd comparison and leave only psd thumbnail
     - add eman2 requirement warning
     - calculate box size for picking
-    - scale factor for thumbnails changed to 3
+    - fix intensity scaling for thumbnails
 3.0.9 - fix race conditions after adding amplitude spectra option
 3.0.8 - add calculate from amplitude spectra option, update default values
 3.0.7 - minor fixes
