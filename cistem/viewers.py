@@ -135,15 +135,15 @@ class ProtUnblurViewer(EmProtocolViewer):
         form.addSection(label='Visualization')
         if self.hasMics():
             form.addParam('doShowMics', LabelParam,
-                      label="Show aligned micrographs?", default=True,
-                      help="Show the output aligned micrographs.")
+                          label="Show aligned micrographs?", default=True,
+                          help="Show the output aligned micrographs.")
 
         if self.hasDWMics():
             form.addParam('doShowMicsDW', LabelParam,
-                      label="Show aligned DOSE-WEIGHTED micrographs?",
-                      default=True,
-                      help="Show the output aligned dose-weighted "
-                           "micrographs.")
+                          label="Show aligned DOSE-WEIGHTED micrographs?",
+                          default=True,
+                          help="Show the output aligned dose-weighted "
+                               "micrographs.")
         form.addParam('doShowMovies', LabelParam,
                       label="Show output movies?", default=True,
                       help="Show the output movies with alignment "
