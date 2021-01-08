@@ -183,12 +183,11 @@ class ProtUnblurViewer(EmProtocolViewer):
                          showj.RENDER: None
                          }
         if param == 'doShowMics':
-                return [MicrographsView(self.getProject(),
-                                        self.protocol.outputMicrographs)]
+            return [MicrographsView(self.getProject(),
+                                    self.protocol.outputMicrographs)]
         elif param == 'doShowMicsDW':
-
-                return [MicrographsView(self.getProject(),
-                                        self.protocol.outputMicrographsDoseWeighted)]
+            return [MicrographsView(self.getProject(),
+                                    self.protocol.outputMicrographsDoseWeighted)]
 
         elif param == 'doShowMovies':
             if getattr(self.protocol, 'outputMovies', None) is not None:
