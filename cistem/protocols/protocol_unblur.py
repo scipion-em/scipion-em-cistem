@@ -375,17 +375,11 @@ eof\n
         if movieFn.endswith("tiff"):
             pwutils.createLink(movieFn, self._getMovieFn(movie))
 
-    def _getRelPath(self, baseName, refPath):
-        return os.path.relpath(self._getExtraPath(baseName), refPath)
-
     def _getMicFn(self, movie):
-        movieFolder = self._getOutputMovieFolder(movie)
         if self.doApplyDoseFilter:
-            return self._getRelPath(self._getOutputMicWtName(movie),
-                                    movieFolder)
+            return os.path.abspath(self._getExtraPath(self._getOutputMicWtName(movie)))
         else:
-            return self._getRelPath(self._getOutputMicName(movie),
-                                    movieFolder)
+            return self._getRelPath(self._getExtraPath(self._getOutputMicName(movie)))
 
     def _getMovieLogFile(self, movie):
         return 'movie_%06d_shifts.txt' % movie.getObjId()

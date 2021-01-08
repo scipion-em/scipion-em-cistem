@@ -83,8 +83,7 @@ class TestUnblur(TestMoviesBase):
 
         outputMics = getattr(prot, 'outputMicrographsDoseWeighted', None)
         self.assertIsNotNone(outputMics)
-        self.assertEqual(protImport.outputMovies.getSize(),
-                         outputMics.getSize())
+        self.assertSetSize(outputMics, size=protImport.outputMovies.getSize())
 
         for mic in outputMics:
             micFn = mic.getFileName()
