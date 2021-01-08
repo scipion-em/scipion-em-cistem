@@ -127,7 +127,7 @@ class ProgramCtffind:
                        help="Select this option if CTF determination "
                             "fails on images that show clear Thon rings "
                             "and should therefore yield good CTF parameters, "
-                            "or if you expect noticably elliptical Thon "
+                            "or if you expect noticeably elliptical Thon "
                             "rings and high noise.")
 
         group.addParam('fixAstig', params.BooleanParam, default=True,

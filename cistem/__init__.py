@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.0.10'
+__version__ = '3.1.0'
 _logo = "cistem_logo.png"
 _references = ['Grant2018']
 
@@ -62,8 +62,8 @@ class Plugin(pwem.Plugin):
         """ Return the program binary that will be used. """
         if program == CTFFIND4_BIN:
             # if CTFFIND4_HOME is found, use it
-            path = cls.getVar(CTFFIND4_HOME, None)
-            if os.path.exists(path):
+            path = cls.getVar(CTFFIND4_HOME)
+            if pwutils.exists(path):
                 binary = os.path.join(path, 'bin', program)
             else:
                 binary = os.path.join(cls.getHome(), program)

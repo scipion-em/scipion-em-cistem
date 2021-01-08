@@ -27,6 +27,7 @@
 import os
 import numpy as np
 from collections import OrderedDict
+
 from pwem.objects import (Coordinate, SetOfClasses2D, SetOfAverages,
                           Transform, CTFModel)
 from pwem.constants import ALIGN_PROJ

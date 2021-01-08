@@ -43,8 +43,7 @@ def createCtfPlot(ctfSet, ctfId):
     xplotter = EmPlotter(windowTitle='CTFFind results')
     plot_title = getPlotSubtitle(ctfModel)
     a = xplotter.createSubPlot(plot_title, 'Spacial frequency (1/A)',
-                               'Amplitude (or cross-correlation)',
-                               yformat=False)
+                               'Amplitude (or cross-correlation)')
     legendName = ['Amplitude spectrum',
                   'CTF Fit',
                   'Quality of fit']

@@ -223,9 +223,9 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             outMic = os.path.join(self._getTmpPath(),
                                   pwutils.replaceBaseExt(micName, 'mrc'))
             if micName.endswith('.mrc'):
-                pwutils.createLink(micName, outMic)
+                pwutils.createAbsLink(os.path.abspath(micName), outMic)
             else:
-                ih.convert(micName, outMic)
+                ih.convert(micName, outMic, emlib.DT_FLOAT)
 
         if refsId is not None:
             writeReferences(self.getInputReferences(),
@@ -271,15 +271,29 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
                 self.runJob(self._getProgram(), cmdArgs,
                             env=Plugin.getEnviron())
 
-                # Move output from micPath (tmp) to extra
+                # Move output coords from tmp to extra
                 pltFn = pwutils.replaceExt(self._getStackFn(mic), 'plt')
                 pwutils.moveFile(pltFn, self._getPltFn(mic))
 
                 # Clean tmp folder
                 pwutils.cleanPath(outMic)
                 pwutils.cleanPath(self._getLogFn(mic))
-            except RuntimeError:
-                print("Picking for mic %s failed! Skipping.." % micName)
+                pwutils.cleanPath(self._getStackFn(mic))
+            except Exception as e:
+                self.error("ERROR: Picking has failed for %s. %s" % (
+                    outMic, self._getErrorFromPickerTxt(mic, e)))
+
+    def _getErrorFromPickerTxt(self, mic, e):
+        """ Parse output log for errors.
+        :param mic: input mic object
+        :return: the error string
+        """
+        file = self._getLogFn(mic)
+        with open(file, "r") as fh:
+            for line in fh.readlines():
+                if line.startswith("Error"):
+                    return line.replace("Error:", "")
+        return e
 
     def createOutputStep(self):
         """ Read the coordinates and define outputs."""
@@ -345,7 +359,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
                          'radius': self.radius.get(),
                          'maxradius': self.maxradius.get(),
                          'highRes': self.highRes.get(),
-                         'boxSize': 120,
+                         'boxSize': int(self.maxradius.get() / sampling),
                          'minDist': self.minDist.get(),
                          'threshold': self.threshold.get(),
                          'avoidHighVar': 'YES' if self.avoidHighVar else 'NO',
