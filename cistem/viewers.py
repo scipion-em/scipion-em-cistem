@@ -134,10 +134,13 @@ class ProtUnblurViewer(EmProtocolViewer):
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
-        form.addParam('doShowMics', LabelParam,
+        if self.hasMics():
+            form.addParam('doShowMics', LabelParam,
                       label="Show aligned micrographs?", default=True,
                       help="Show the output aligned micrographs.")
-        form.addParam('doShowMicsDW', LabelParam,
+
+        if self.hasDWMics():
+            form.addParam('doShowMicsDW', LabelParam,
                       label="Show aligned DOSE-WEIGHTED micrographs?",
                       default=True,
                       help="Show the output aligned dose-weighted "
@@ -153,12 +156,24 @@ class ProtUnblurViewer(EmProtocolViewer):
 
     def _getVisualizeDict(self):
         self._errors = []
-        visualizeDict = {'doShowMics': self._viewParam,
-                         'doShowMicsDW': self._viewParam,
+
+        visualizeDict = {
                          'doShowMovies': self._viewParam,
                          'doShowFailedMovies': self._viewParam
                          }
+        if self.hasMics():
+            visualizeDict.update({'doShowMics': self._viewParam})
+
+        if self.hasDWMics():
+            visualizeDict.update({'doShowMicsDW': self._viewParam})
+
         return visualizeDict
+
+    def hasMics(self):
+        return hasattr(self.protocol, 'outputMicrographs')
+
+    def hasDWMics(self):
+        return hasattr(self.protocol, 'outputMicrographsDoseWeighted')
 
     def _viewParam(self, param=None):
         labelsDef = 'enabled id _filename _samplingRate '
@@ -169,20 +184,12 @@ class ProtUnblurViewer(EmProtocolViewer):
                          showj.RENDER: None
                          }
         if param == 'doShowMics':
-            if getattr(self.protocol, 'outputMicrographs', None) is not None:
                 return [MicrographsView(self.getProject(),
                                         self.protocol.outputMicrographs)]
-            else:
-                return [self.errorMessage('No output micrographs found!',
-                                          title="Visualization error")]
-
         elif param == 'doShowMicsDW':
-            if getattr(self.protocol, 'outputMicrographsDoseWeighted', None) is not None:
+
                 return [MicrographsView(self.getProject(),
                                         self.protocol.outputMicrographsDoseWeighted)]
-            else:
-                return [self.errorMessage('No output dose-weighted micrographs found!',
-                                          title="Visualization error")]
 
         elif param == 'doShowMovies':
             if getattr(self.protocol, 'outputMovies', None) is not None:
