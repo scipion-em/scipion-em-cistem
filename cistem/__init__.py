@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.0.9'
+__version__ = '3.0.10'
 _logo = "cistem_logo.png"
 _references = ['Grant2018']
 
@@ -75,8 +75,7 @@ class Plugin(pwem.Plugin):
     @classmethod
     def defineBinaries(cls, env):
         env.addPackage('cistem', version='1.0.0-beta',
-                       url='"https://cistem.org/system/tdf/upload3/cistem-1.0.0'
-                       '-beta-intel-linux.tar.gz?file=1&type=cistem_details&id=37&force=0"',
+                       url="https://grigoriefflab.umassmed.edu/sites/default/files/cistem-1.0.0-beta-intel-linux.tar.gz",
                        default=True)
         env.addPackage('ctffind4', version='4.1.13',
                        tar='ctffind4-4.1.13.tgz')
