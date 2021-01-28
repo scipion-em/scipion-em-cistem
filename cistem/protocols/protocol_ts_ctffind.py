@@ -47,6 +47,7 @@ class ProtTsCtffind(ProtTsEstimateCTF):
     def __init__(self, **kwargs):
         EMProtocol.__init__(self, **kwargs)
         self.stepsExecutionMode = STEPS_PARALLEL
+        self.usePowerSpectra = False
 
     # -------------------------- DEFINE param functions -----------------------
     def _initialize(self):
@@ -78,21 +79,25 @@ class ProtTsCtffind(ProtTsEstimateCTF):
 
             program, args = self._ctfProgram.getCommand(
                 micFn=tiFn,
+                powerSpectraPix=None,
                 ctffindOut=outputLog,
                 ctffindPSD=outputPsd)
+
             self.runJob(program, args)
 
             # Move files we want to keep
             pwutils.moveFile(outputPsd, self._getExtraPath(tsId))
             pwutils.moveFile(outputPsd.replace('.mrc', '.txt'),
                              self._getTmpPath())
-
         except:
             print("ERROR: Ctffind has failed for %s" % tiFn)
 
     # --------------------------- INFO functions ------------------------------
     def _validate(self):
         errors = []
+
+        if self.lowRes.get() > 50:
+            errors.append("Minimum resolution cannot be > 50A.")
 
         valueStep = round(self.stepPhaseShift.get(), 2)
         valueMin = round(self.minPhaseShift.get(), 2)
@@ -127,6 +132,3 @@ class ProtTsCtffind(ProtTsEstimateCTF):
         outCtf = self._getTmpPath(psd.replace('.mrc', '.txt'))
         return self._ctfProgram.parseOutputAsCtf(outCtf,
                                                  psdFile=self._getExtraPath(psd))
-
-    def usePowerSpectra(self):
-        return False

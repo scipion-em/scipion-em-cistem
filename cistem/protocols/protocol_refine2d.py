@@ -740,7 +740,7 @@ eof
                 parFn = self._getFileName('iter_par_block', iter=iterN,
                                           block=block)
                 if not os.path.exists(parFn):
-                    raise FileExistsError("Error: file %s does not exist" % parFn)
+                    raise FileNotFoundError("Error: file %s does not exist" % parFn)
                 f2 = open(parFn)
 
                 for l in f2:
