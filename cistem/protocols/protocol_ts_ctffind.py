@@ -127,3 +127,6 @@ class ProtTsCtffind(ProtTsEstimateCTF):
         outCtf = self._getTmpPath(psd.replace('.mrc', '.txt'))
         return self._ctfProgram.parseOutputAsCtf(outCtf,
                                                  psdFile=self._getExtraPath(psd))
+
+    def usePowerSpectra(self):
+        return False
