@@ -25,11 +25,10 @@
 # *
 # **************************************************************************
 
-from pyworkflow.tests import *
+from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pwem.protocols import ProtImportMovies
-from pyworkflow.utils import magentaStr
+from pyworkflow.utils import magentaStr, exists
 
-from cistem import *
 from ..protocols import CistemProtUnblur
 
 
@@ -88,4 +87,4 @@ class TestUnblur(TestMoviesBase):
 
         for mic in outputMics:
             micFn = mic.getFileName()
-            self.assertTrue(os.path.exists(self.proj.getPath(micFn)))
+            self.assertTrue(exists(self.proj.getPath(micFn)))

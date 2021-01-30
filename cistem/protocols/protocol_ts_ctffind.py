@@ -6,7 +6,7 @@
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
-# * the Free Software Foundation; either version 2 of the License, or
+# * the Free Software Foundation; either version 3 of the License, or
 # * (at your option) any later version.
 # *
 # * This program is distributed in the hope that it will be useful,
@@ -41,14 +41,13 @@ except ImportError:
 
 
 class ProtTsCtffind(ProtTsEstimateCTF):
-    """
-    CTF estimation on Tilt-Series using CTFFIND4.
-    """
-    _label = 'tiltseries ctffind'
+    """ CTF estimation on a set of tilt series using CTFFIND4. """
+    _label = 'tiltseries ctffind4'
 
     def __init__(self, **kwargs):
         EMProtocol.__init__(self, **kwargs)
         self.stepsExecutionMode = STEPS_PARALLEL
+        self.usePowerSpectra = False
 
     # -------------------------- DEFINE param functions -----------------------
     def _initialize(self):
@@ -80,21 +79,25 @@ class ProtTsCtffind(ProtTsEstimateCTF):
 
             program, args = self._ctfProgram.getCommand(
                 micFn=tiFn,
+                powerSpectraPix=None,
                 ctffindOut=outputLog,
                 ctffindPSD=outputPsd)
+
             self.runJob(program, args)
 
             # Move files we want to keep
             pwutils.moveFile(outputPsd, self._getExtraPath(tsId))
             pwutils.moveFile(outputPsd.replace('.mrc', '.txt'),
                              self._getTmpPath())
-
-        except Exception as ex:
+        except:
             print("ERROR: Ctffind has failed for %s" % tiFn)
 
     # --------------------------- INFO functions ------------------------------
     def _validate(self):
         errors = []
+
+        if self.lowRes.get() > 50:
+            errors.append("Minimum resolution cannot be > 50A.")
 
         valueStep = round(self.stepPhaseShift.get(), 2)
         valueMin = round(self.minPhaseShift.get(), 2)
@@ -115,8 +118,8 @@ class ProtTsCtffind(ProtTsEstimateCTF):
 
     # --------------------------- UTILS functions -----------------------------
     def _getArgs(self):
-        """ Return a list with parameters that will be passed to the process
-        TiltSeries step. It can be redefined by subclasses.
+        """ Redefine a list with parameters that will be passed to the process
+        TiltSeries step.
         """
         return []
 
@@ -124,8 +127,7 @@ class ProtTsCtffind(ProtTsEstimateCTF):
         return '%s_PSD.mrc' % self.getTiPrefix(ti)
 
     def getCtf(self, ti):
-        """ Parse the CTF object estimated for this Tilt-Image
-        """
+        """ Parse the CTF object estimated for this Tilt-Image. """
         psd = self.getPsdName(ti)
         outCtf = self._getTmpPath(psd.replace('.mrc', '.txt'))
         return self._ctfProgram.parseOutputAsCtf(outCtf,

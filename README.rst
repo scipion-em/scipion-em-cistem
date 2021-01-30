@@ -64,7 +64,7 @@ b) Developer's version
 cisTEM binaries will be installed automatically with the plugin, but you can also link an existing installation.
 
     * Default installation path assumed is ``software/em/cistem-1.0.0-beta``, if you want to change it, set *CISTEM_HOME* in ``scipion.conf`` file pointing to the folder where the cisTEM is installed.
-    * It's possible to use CTFFIND4 installed separately from cisTEM by defining *CTFFIND4_HOME* variable in ``scipion.conf``.
+    * It's possible to use CTFFIND4 installed separately from cisTEM by defining *CTFFIND4_HOME* variable in ``scipion.conf``. Setting this value will have the priority over Ctffind inside cisTEM.
 
 To check the installation, simply run one of the following Scipion tests:
 

@@ -39,10 +39,9 @@ from .program_ctffind import ProgramCtffind
 
 
 class CistemProtCTFFind(ProtCTFMicrographs):
-    """
-    Estimates CTF for a set of micrographs/movies with ctffind4.
+    """ Estimate CTF for a set of micrographs with ctffind4.
     
-    To find more information about ctffind4 go to:
+    To find more information about ctffind4 visit:
     https://grigoriefflab.umassmed.edu/ctffind4
     """
     _label = 'ctffind4'
@@ -58,7 +57,10 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     # -------------------------- STEPS functions ------------------------------
     def _doCtfEstimation(self, mic, **kwargs):
-        """ Run ctffind with required parameters """
+        """ Run ctffind with required parameters.
+        :param mic: input mic object
+        :param kwargs: dict with arguments
+        """
         if self.usePowerSpectra:
             micFn = mic._powerSpectra.getFileName()
             powerSpectraPix = self.psSampling
@@ -72,10 +74,13 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
         ih = emlib.image.ImageHandler()
 
-        if not ih.existsLocation(micFn):
-            raise Exception("Missing input micrograph: %s" % micFn)
+        if not pwutils.exists(micFn):
+            raise FileNotFoundError("Missing input micrograph: %s" % micFn)
 
-        ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
+        if micFn.endswith('.mrc'):
+            pwutils.createAbsLink(os.path.abspath(micFn), micFnMrc)
+        else:
+            ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
 
         try:
             program, args = self._ctfProgram.getCommand(
@@ -88,29 +93,32 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
             pwutils.cleanPath(micDir)
 
-        except Exception as ex:
-            print("ERROR: Ctffind has failed for %s. %s" % (
-                micFnMrc,
-                self._getErrorFromCtffindTxt(mic)))
-
-    def _getErrorFromCtffindTxt(self, mic):
-        file = self._getCtfOutPath(mic)
-        try:
-            with open(file, "r") as fh:
-                for line in fh.readlines():
-                    if line.startswith("Error"):
-                        return line.replace("Error:", "")
-            return ""
         except Exception as e:
-            return "Can't parse output file (%s) for errors: %s" % (file, e)
+            self.error("ERROR: Ctffind has failed for %s. %s" % (
+                micFnMrc, self._getErrorFromCtffindTxt(mic, e)))
+
+    def _getErrorFromCtffindTxt(self, mic, e):
+        """ Parse output log for errors.
+        :param mic: input mic object
+        :return: the error string
+        """
+        file = self._getCtfOutPath(mic)
+        with open(file, "r") as fh:
+            for line in fh.readlines():
+                if line.startswith("Error"):
+                    return line.replace("Error:", "")
+        return e
 
     def _estimateCTF(self, mic, *args):
+        """ Redefined func from the base class. """
         self._doCtfEstimation(mic)
 
     def _reEstimateCTF(self, mic, ctf):
+        """ Redefined func from the base class. """
         self._doCtfEstimation(mic, **self._getRecalCtfParamsDict(ctf))
 
     def _createCtfModel(self, mic, updateSampling=False):
+        """ Redefined func from the base class. """
         psd = self._getPsdPath(mic)
         ctfModel = self._ctfProgram.parseOutputAsCtf(self._getCtfOutPath(mic),
                                                      psdFile=psd)
@@ -119,6 +127,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         return ctfModel
 
     def _createOutputStep(self):
+        """ Do nothing in streaming case. """
         pass
 
     # -------------------------- INFO functions -------------------------------
@@ -142,7 +151,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         valueMax = round(self.maxPhaseShift.get(), 2)
 
         if not (self.minPhaseShift < self.maxPhaseShift and
-                valueStep <= (valueMax-valueMin) and
+                valueStep <= (valueMax - valueMin) and
                 0. <= valueMax <= 180.):
             errors.append('Wrong values for phase shift search.')
 
@@ -150,10 +159,6 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     def _citations(self):
         return ["Mindell2003", "Rohou2015"]
-
-    def _summary(self):
-        summary = ProtCTFMicrographs._summary(self)
-        return summary
 
     def _methods(self):
         methods = []
@@ -168,6 +173,9 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     # -------------------------- UTILS functions ------------------------------
     def _getRecalCtfParamsDict(self, ctfModel):
+        """ Update values from user-adjusted params from the Java GUI.
+        :param ctfModel: input CTF model object
+        """
         values = [float(x) for x in ctfModel.getObjComment().split()]
         sampling = self.inputMicrographs.get().getSamplingRate()
         return {
@@ -179,7 +187,10 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         }
 
     def _getMicExtra(self, mic, suffix):
-        """ Return a file in extra direction with root of micFn. """
+        """ Return a file in extra direction with root of micFn.
+        :param mic: input mic object
+        :param suffix: file extension
+        """
         return self._getExtraPath(pwutils.removeBaseExt(os.path.basename(
             mic.getFileName())) + '_' + suffix)
 

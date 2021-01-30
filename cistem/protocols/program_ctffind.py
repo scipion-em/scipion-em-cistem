@@ -40,7 +40,7 @@ class ProgramCtffind:
     """
     Wrapper of Ctffind4 program that will handle parameters definition
     and also execution of the program with the proper arguments.
-    This class is not a Protocol, but it is related, since it can be used from
+    This class is not a Protocol, but somewhat related, since it can be used from
     protocols that perform CTF estimation.
     """
     def __init__(self, protocol):
@@ -50,7 +50,7 @@ class ProgramCtffind:
 
     @classmethod
     def defineInputParams(cls, form):
-        """ Define input parameters from this program into the given form. """
+        """ Define input/common parameters. """
         form.addSection(label='Input')
         form.addParam('recalculate', params.BooleanParam, default=False,
                       condition='recalculate',
@@ -89,6 +89,7 @@ class ProgramCtffind:
 
     @classmethod
     def defineProcessParams(cls, form):
+        """ Define specific parameters. """
         form.addParam('windowSize', params.IntParam, default=512,
                       label='FFT box size (px)', condition='not recalculate',
                       help='The dimensions (in pixels) of the amplitude '
@@ -126,7 +127,7 @@ class ProgramCtffind:
                        help="Select this option if CTF determination "
                             "fails on images that show clear Thon rings "
                             "and should therefore yield good CTF parameters, "
-                            "or if you expect noticably elliptical Thon "
+                            "or if you expect noticeably elliptical Thon "
                             "rings and high noise.")
 
         group.addParam('fixAstig', params.BooleanParam, default=True,
@@ -179,9 +180,10 @@ class ProgramCtffind:
         form.addParallelSection(threads=2, mpi=1)
 
     def getCommand(self, **kwargs):
-        """ Return the program and arguments to be run.
-        The input keywords argument should contain key-values for
-        one micrograph or group of micrographs.
+        """
+        :param kwargs: The input keywords argument should contain key-values
+        for one micrograph or group of micrographs.
+        :return: the program and arguments to be run
         """
         paramDict = dict(self._params)
         paramDict.update(kwargs)
@@ -190,12 +192,16 @@ class ProgramCtffind:
     def parseOutput(self, filename):
         """ Retrieve defocus U, V and angle from the
         output file of the program execution.
+        :param filename: input file to parse
+        :return: a tuple of CTF values
         """
         return parseCtffind4Output(filename)
 
     def parseOutputAsCtf(self, filename, psdFile=None):
         """ Parse the output file and build the CTFModel object
         with the values.
+        :param filename: input file to parse
+        :param psdFile: if defined, set PSD for the CTF model
         """
         ctf = CTFModel()
         readCtfModel(ctf, filename)
@@ -205,7 +211,10 @@ class ProgramCtffind:
         return ctf
 
     def _getArgs(self, protocol):
-        # Update first the params dict
+        """ Update first the params dict.
+        :param protocol: input protocol instance
+        :return: args string and matching params dict
+        """
         paramDict = protocol.getCtfParamsDict()
         paramDict['step_focus'] = protocol.stepDefocus.get()
         paramDict['fixAstig'] = "yes" if protocol.fixAstig else "no"

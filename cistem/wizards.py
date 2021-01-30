@@ -69,5 +69,5 @@ class CistemCTFWizard(CtfWizard):
                 form.setVar(_label[1], _sampling / d.getHighFreq())
         else:
             dialog.showWarning("Empty input",
-                               "Select elements first",
+                               "Select input micrographs first",
                                form.root)

@@ -40,7 +40,7 @@ from ..constants import *
 
 
 class CistemProtFindParticles(ProtParticlePickingAuto):
-    """ Protocol to pick particles in a set of micrographs using cisTEM. """
+    """ Protocol to pick particles (ab-initio or reference-based) using cisTEM. """
     _label = 'find particles'
 
     def __init__(self, **kwargs):
@@ -152,7 +152,6 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
         self._defineStreamingParams(form)
 
-        # Allow many threads if we can put more than one in a CPU
         form.addParallelSection(threads=1, mpi=1)
 
     # -------------------------- INSERT steps functions -----------------------
@@ -178,7 +177,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             self._stepsCheck = self._doNothing
 
     def _insertInitialSteps(self):
-        # Convert the input micrographs to mrc
+        """ Convert the input micrographs to mrc. """
         inputRefs = self.getInputReferences()
         refsId = inputRefs.strId() if inputRefs is not None else None
         convertId = self._insertFunctionStep('convertInputStep',
@@ -211,7 +210,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self, micsId, refsId):
-        # Match ctf information against the micrographs
+        """ Match ctf information against the micrographs. """
         self.ctfDict = {}
         if self.ctfRelations.get() is not None:
             for ctf in self.ctfRelations.get():
@@ -224,9 +223,9 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             outMic = os.path.join(self._getTmpPath(),
                                   pwutils.replaceBaseExt(micName, 'mrc'))
             if micName.endswith('.mrc'):
-                pwutils.createLink(micName, outMic)
+                pwutils.createAbsLink(os.path.abspath(micName), outMic)
             else:
-                ih.convert(micName, outMic)
+                ih.convert(micName, outMic, emlib.DT_FLOAT)
 
         if refsId is not None:
             writeReferences(self.getInputReferences(),
@@ -239,6 +238,10 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         self._pickMicrographStep(micList, *args)
 
     def _pickMicrographStep(self, mics, args):
+        """ Main func that runs the picking job.
+        :param mics: micrograph list
+        :param args: programs args
+        """
         for mic in mics:
             micName = mic.getFileName()
             outMic = os.path.join(self._getTmpPath(),
@@ -268,17 +271,32 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
                 self.runJob(self._getProgram(), cmdArgs,
                             env=Plugin.getEnviron())
 
-                # Move output from micPath (tmp) to extra
+                # Move output coords from tmp to extra
                 pltFn = pwutils.replaceExt(self._getStackFn(mic), 'plt')
                 pwutils.moveFile(pltFn, self._getPltFn(mic))
 
                 # Clean tmp folder
                 pwutils.cleanPath(outMic)
                 pwutils.cleanPath(self._getLogFn(mic))
-            except:
-                print("Picking for mic %s failed! Skipping.." % micName)
+                pwutils.cleanPath(self._getStackFn(mic))
+            except Exception as e:
+                self.error("ERROR: Picking has failed for %s. %s" % (
+                    outMic, self._getErrorFromPickerTxt(mic, e)))
+
+    def _getErrorFromPickerTxt(self, mic, e):
+        """ Parse output log for errors.
+        :param mic: input mic object
+        :return: the error string
+        """
+        file = self._getLogFn(mic)
+        with open(file, "r") as fh:
+            for line in fh.readlines():
+                if line.startswith("Error"):
+                    return line.replace("Error:", "")
+        return e
 
     def createOutputStep(self):
+        """ Read the coordinates and define outputs."""
         micSet = self.getInputMicrographs()
         coordSet = self._createSetOfCoordinates(micSet)
         self.readCoordsFromMics(self._getExtraPath(), micSet,
@@ -324,6 +342,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
     # --------------------------- UTILS functions -------------------------------
     def _getProgram(self):
+        """ Return program binary. """
         return Plugin.getProgram(FIND_PARTICLES_BIN)
 
     def _getPickArgs(self):
@@ -340,7 +359,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
                          'radius': self.radius.get(),
                          'maxradius': self.maxradius.get(),
                          'highRes': self.highRes.get(),
-                         'boxSize': 120,
+                         'boxSize': int(self.maxradius.get() / sampling),
                          'minDist': self.minDist.get(),
                          'threshold': self.threshold.get(),
                          'avoidHighVar': 'YES' if self.avoidHighVar else 'NO',
@@ -435,6 +454,7 @@ eof"""
         return argsStr
 
     def readCoordsFromMics(self, extraDir, micList, coordSet):
+        """ Overwrite base class function. """
         if coordSet.getBoxSize() is None:
             coordSet.setBoxSize(128)
 
@@ -448,6 +468,7 @@ eof"""
         return self.inputMicrographs.get()
 
     def _getLogFn(self, mic):
+        """ Return output log file. """
         micName = mic.getFileName()
         return pwutils.join(self._getTmpPath(),
                             pwutils.replaceBaseExt(micName, 'log'))
@@ -456,6 +477,7 @@ eof"""
         return self._getTmpPath('mic_%06d.mrc' % mic.getObjId())
 
     def _getPltFn(self, mic):
+        """ Return output plt coords file. """
         micName = mic.getFileName()
         return pwutils.join(self._getExtraPath(),
                             pwutils.replaceBaseExt(micName, 'plt'))

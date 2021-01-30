@@ -28,17 +28,17 @@
 # *
 # **************************************************************************
 
-import os
 import time
 from math import ceil
 from threading import Thread
 
 import pyworkflow.utils as pwutils
-from pwem.objects import Image
+
 from pyworkflow.protocol import STEPS_PARALLEL
-from pwem.protocols import ProtAlignMovies
 import pyworkflow.protocol.params as params
 from pyworkflow.gui.plotter import Plotter
+from pwem.objects import Image
+from pwem.protocols import ProtAlignMovies
 
 from cistem import Plugin
 from ..convert import readShiftsMovieAlignment
@@ -46,10 +46,8 @@ from ..constants import UNBLUR_BIN
 
 
 class CistemProtUnblur(ProtAlignMovies):
-    """ This protocol wraps unblur movie alignment program.
+    """ This protocol wraps unblur movie alignment program. """
 
-    More information at https://cistem.org/documentation
-    """
     _label = 'unblur'
     CONVERT_TO_MRC = 'mrc'
 
@@ -85,16 +83,15 @@ class CistemProtUnblur(ProtAlignMovies):
 
         form.addParam('doComputePSD', params.BooleanParam, default=False,
                       expertLevel=params.LEVEL_ADVANCED,
-                      label="Compute PSD (before/after)?",
-                      help="If Yes, the protocol will compute for each movie "
-                           "the average PSD before and after alignment, "
-                           "for comparison")
+                      label="Compute PSD?",
+                      help="If Yes, the protocol will compute for each "
+                           "aligned micrograph the PSD using EMAN2.")
         form.addParam('doComputeMicThumbnail', params.BooleanParam,
                       expertLevel=params.LEVEL_ADVANCED,
                       default=False,
                       label='Compute micrograph thumbnail?',
                       help='When using this option, we will compute a '
-                           'micrograph thumbnail and keep it with the '
+                           'micrograph thumbnail with EMAN2 and keep it with the '
                            'micrograph object for visualization purposes. ')
         form.addParam('extraProtocolParams', params.StringParam, default='',
                       expertLevel=params.LEVEL_ADVANCED,
@@ -191,46 +188,25 @@ class CistemProtUnblur(ProtAlignMovies):
         form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- STEPS functions -----------------------------
-
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
-        movieFolder = self._getOutputMovieFolder(movie)
-        movieBaseName = pwutils.removeExt(movie.getFileName())
-        aveMicFn = movieBaseName + '_uncorrected_avg.mrc'
-        self._createLink(movie)
+        self._createTifLink(movie)
         self._argsUnblur(movie)
         
         try:
-            self.runJob(self._getProgram(), self._args, cwd=movieFolder,
-                        env=Plugin.getEnviron())
-            pwutils.moveFile(pwutils.join(movieFolder,
-                                          self._getMovieLogFile(movie)),
-                             self._getShiftsFn(movie))
-
-            # Compute PSDs
-            outMicFn = self._getExtraPath(self._getOutputMicName(movie))
-            if not os.path.exists(outMicFn):
-                # if only DW mic is saved
-                outMicFn = self._getExtraPath(self._getOutputMicWtName(movie))
+            self.runJob(self._getProgram(), self._args, env=Plugin.getEnviron())
 
             def _extraWork():
-                if self.doComputePSD:
-                    # Compute uncorrected avg mic
-                    self.averageMovie(movie, self._getMovieFn(movie), aveMicFn,
-                                      binFactor=self.binFactor.get())
+                outMicFn = self._getMicFn(movie)
 
-                    self.computePSDImages(movie, aveMicFn, outMicFn,
-                                          outputFnCorrected=self._getPsdJpeg(movie))
+                if self.doComputePSD:
+                    self._computePSD(outMicFn, outputFn=self._getPsdCorr(movie))
 
                 self._saveAlignmentPlots(movie, inputMovies.getSamplingRate())
 
                 if self._doComputeMicThumbnail():
                     self.computeThumbnail(outMicFn,
-                                          outputFn=self._getOutputMicThumbnail(
-                                              movie))
-                # This protocols cleans up the temporary movie folder
-                # which is required mainly when using a thread for this extra work
-                self._cleanMovieFolder(movieFolder)
+                                          outputFn=self._getOutputMicThumbnail(movie))
 
             if self._useWorkerThread():
                 thread = Thread(target=_extraWork)
@@ -238,8 +214,21 @@ class CistemProtUnblur(ProtAlignMovies):
             else:
                 _extraWork()
 
-        except:
-            print("ERROR: Failed to align movie %s\n" % movie.getFileName())
+        except Exception as e:
+            self.error("ERROR: Unblur has failed for %s. %s" % (
+                self._getMovieFn(movie), self._getErrorFromUnblurTxt(movie, e)))
+
+    def _getErrorFromUnblurTxt(self, movie, e):
+        """ Parse output log for errors.
+        :param movie: input movie object
+        :return: the error string
+        """
+        file = self._getShiftsFn(movie)
+        with open(file, "r") as fh:
+            for line in fh.readlines():
+                if line.startswith("Error"):
+                    return line.replace("Error:", "")
+        return e
 
     def _insertFinalSteps(self, deps):
         stepId = self._insertFunctionStep('waitForThreadStep',
@@ -248,10 +237,10 @@ class CistemProtUnblur(ProtAlignMovies):
 
     def waitForThreadStep(self):
         # Quick and dirty (maybe desperate) way to wait
-        # if the PSD and thumbnail were computed with a thread
+        # if the PSD and thumbnail were computed in a thread
         # If running in streaming this will not be necessary
         if self._useWorkerThread():
-            time.sleep(60)  # wait 1 min to give some time the thread to finish
+            time.sleep(10)  # wait 10 sec for the thread to finish
 
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
@@ -281,10 +270,19 @@ class CistemProtUnblur(ProtAlignMovies):
                 errors.append('Dose per frame for input movies is 0 or not '
                               'set. You cannot apply dose filter.')
 
+        if self.doComputeMicThumbnail or self.doComputePSD:
+            try:
+                from pwem import Domain
+                eman2 = Domain.importFromPlugin('eman2', doRaise=True)
+            except:
+                errors.append("EMAN2 plugin not found!\nComputing thumbnails "
+                              "or PSD requires EMAN2 plugin and binaries installed.")
+
         return errors
 
     # --------------------------- UTILS functions -----------------------------
     def _getProgram(self):
+        """ Return program binary. """
         return Plugin.getProgram(UNBLUR_BIN)
 
     def _argsUnblur(self, movie):
@@ -295,9 +293,9 @@ class CistemProtUnblur(ProtAlignMovies):
         else:
             preExp, dose = 0.0, 0.0
 
-        args = {'movieName': os.path.basename(self._getMovieFn(movie)),
+        args = {'movieName': self._getMovieFn(movie),
                 'micFnName': self._getMicFn(movie),
-                'shiftsFn': self._getMovieLogFile(movie),
+                'shiftsFn': self._getShiftsFn(movie),
                 'samplingRate': self.samplingRate,
                 'voltage': movie.getAcquisition().getVoltage(),
                 'bfactor': self.bfactor.get(),
@@ -372,25 +370,17 @@ eof\n
         else:
             return movieFn
 
-    def _createLink(self, movie):
+    def _createTifLink(self, movie):
+        # unblur recognises only tif, not tiff
         movieFn = movie.getFileName()
         if movieFn.endswith("tiff"):
             pwutils.createLink(movieFn, self._getMovieFn(movie))
 
-    def _getRelPath(self, baseName, refPath):
-        return os.path.relpath(self._getExtraPath(baseName), refPath)
-
     def _getMicFn(self, movie):
-        movieFolder = self._getOutputMovieFolder(movie)
         if self.doApplyDoseFilter:
-            return self._getRelPath(self._getOutputMicWtName(movie),
-                                    movieFolder)
+            return self._getExtraPath(self._getOutputMicWtName(movie))
         else:
-            return self._getRelPath(self._getOutputMicName(movie),
-                                    movieFolder)
-
-    def _getMovieLogFile(self, movie):
-        return 'movie_%06d_shifts.txt' % movie.getObjId()
+            return self._getExtraPath(self._getOutputMicName(movie))
 
     def _getShiftsFn(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.txt')
@@ -407,16 +397,28 @@ eof\n
         return xShiftsCorr, yShiftsCorr
 
     def _doComputeMicThumbnail(self):
-        return self.doComputeMicThumbnail.get()
+        return self.doComputeMicThumbnail
+
+    def _computePSD(self, inputFn, outputFn, scaleFactor=6):
+        """ Generate a thumbnail of the PSD with EMAN2"""
+        args = "%s %s " % (inputFn, outputFn)
+        args += "--process=math.realtofft --meanshrink %s " % scaleFactor
+        args += "--fixintscaling=sane"
+
+        from pwem import Domain
+        eman2 = Domain.importFromPlugin('eman2')
+        from pyworkflow.utils.process import runJob
+        runJob(self._log, eman2.Plugin.getProgram('e2proc2d.py'), args,
+               env=eman2.Plugin.getEnviron())
+
+        return outputFn
 
     def _preprocessOutputMicrograph(self, mic, movie):
         mic.plotGlobal = Image(location=self._getPlotGlobal(movie))
         if self.doComputePSD:
             mic.psdCorr = Image(location=self._getPsdCorr(movie))
-            mic.psdJpeg = Image(location=self._getPsdJpeg(movie))
         if self._doComputeMicThumbnail():
-            mic.thumbnail = Image(
-                location=self._getOutputMicThumbnail(movie))
+            mic.thumbnail = Image(location=self._getOutputMicThumbnail(movie))
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
         fn = self._getMovieRoot(movie) + postFix + '.' + ext
@@ -426,10 +428,7 @@ eof\n
         return self._getNameExt(movie, '_global_shifts', 'png', extra=True)
 
     def _getPsdCorr(self, movie):
-        return self._getNameExt(movie, '_psd_comparison', 'psd', extra=True)
-
-    def _getPsdJpeg(self, movie):
-        return self._getNameExt(movie, '_psd', 'jpeg', extra=True)
+        return self._getNameExt(movie, '_psd', 'png', extra=True)
 
     def _saveAlignmentPlots(self, movie, pixSize):
         """ Compute alignment shift plots and save to file as png images. """
@@ -479,7 +478,6 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     ax_ang2.set_ylabel('Shift y (A)')
 
     i = first
-    # by the program if dose filtering is required
     skipLabels = ceil(len(meanX)/10.0)
     labelTick = 1
 
@@ -500,7 +498,7 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     ax_px.plot(sumMeanX, sumMeanY, color='b')
     ax_px.plot(sumMeanX, sumMeanY, 'yo')
     ax_px.plot(sumMeanX[0], sumMeanY[0], 'ro', markersize=10, linewidth=0.5)
-    # ax_ang2.set_title('Full-frame alignment')
+    ax_px.set_title('Global frame alignment')
 
     plotter.tightLayout()
 

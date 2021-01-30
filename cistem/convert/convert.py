@@ -27,6 +27,7 @@
 import os
 import numpy as np
 from collections import OrderedDict
+
 from pwem.objects import (Coordinate, SetOfClasses2D, SetOfAverages,
                           Transform, CTFModel)
 from pwem.constants import ALIGN_PROJ
@@ -41,12 +42,15 @@ HEADER_COLUMNS = ['INDEX', 'PSI', 'THETA', 'PHI', 'SHX', 'SHY', 'MAG',
 
 
 class FrealignParFile(object):
-    """ Handler class to read/write frealign metadata."""
+    """ Handler class to read/write Frealign par file."""
     def __init__(self, filename, mode='r'):
         self._file = open(filename, mode)
         self._count = 0
 
     def __iter__(self):
+        """ Convert a line into a dict with HEADER_COLUMNS as keys.
+        :return: yield a dict - single row
+        """
         for line in self._file:
             line = line.strip()
             if not line.startswith('C'):
@@ -58,14 +62,16 @@ class FrealignParFile(object):
 
 
 def readSetOfParticles(inputSet, outputSet, parFileName):
-    """
-     Iterate through the inputSet and the parFile lines
+    """ Iterate through the inputSet and the parFile lines
      and populate the outputSet with the same particles
      of inputSet, but with the angles and shift (3d alignment)
      updated from the parFile info.
      It is assumed that the order of iteration of the particles
      and the lines match and have the same number.
-    """
+     :param inputSet: input set of particles
+     :param outputSet: output set of particles to be populated
+     :param parFileName: Frealign par file to read alignments
+     """
     # create dictionary that matches input particles with param file
     samplingRate = inputSet.getSamplingRate()
     parFile = FrealignParFile(parFileName)
@@ -85,6 +91,10 @@ def readSetOfParticles(inputSet, outputSet, parFileName):
 
 
 def rowToCtfModel(ctfRow, ctfModel):
+    """ Convert a row to Scipion CTF model.
+    :param ctfRow: input row
+    :param ctfModel: output model
+    """
     defocusU = float(ctfRow.get('DF1'))
     defocusV = float(ctfRow.get('DF2'))
     defocusAngle = float(ctfRow.get('ANGAST'))
@@ -94,6 +104,8 @@ def rowToCtfModel(ctfRow, ctfModel):
 def parseCtffind4Output(filename):
     """ Retrieve defocus U, V and angle from the
     output file of the ctffind4 execution.
+    :param filename: input file to parse
+    :return: a tuple of CTF values
     """
     result = None
     if os.path.exists(filename):
@@ -108,12 +120,19 @@ def parseCtffind4Output(filename):
 
 
 def setWrongDefocus(ctfModel):
+    """ Set parameters if results parsing has failed.
+    :param ctfModel: the model to be updated
+    """
     ctfModel.setDefocusU(-999)
     ctfModel.setDefocusV(-1)
     ctfModel.setDefocusAngle(-999)
     
     
 def readCtfModel(ctfModel, filename):
+    """ Set values for the ctfModel.
+    :param ctfModel: output CTF model
+    :param filename: input file to parse
+    """
     result = parseCtffind4Output(filename)
     if result is None:
         setWrongDefocus(ctfModel)
@@ -131,6 +150,10 @@ def readCtfModel(ctfModel, filename):
 
 
 def readShiftsMovieAlignment(shiftFn):
+    """ Parse movie alignment shifts.
+    :param shiftFn: input file to parse
+    :return: two lists with shift values
+    """
     with open(shiftFn, 'r') as f:
         xshifts = []
         yshifts = []
@@ -144,48 +167,23 @@ def readShiftsMovieAlignment(shiftFn):
     return xshifts, yshifts
 
 
-def writeShiftsMovieAlignment(movie, shiftsFn, s0, sN):
-    movieAlignment = movie.getAlignment()
-    shiftListX, shiftListY = movieAlignment.getShifts()
-
-    # Generating metadata for global shifts
-    a0, aN = movieAlignment.getRange()
-    alFrame = a0
-
-    if s0 < a0:
-        diff = a0 - s0
-        initShifts = "0.0000 " * diff
-    else:
-        initShifts = ""
-
-    if sN > aN:
-        diff = sN - aN
-        finalShifts = "0.0000 " * diff
-    else:
-        finalShifts = ""
-
-    shiftsX = ""
-    shiftsY = ""
-    for shiftX, shiftY in zip(shiftListX, shiftListY):
-        if s0 <= alFrame <= sN:
-            shiftsX = shiftsX + "%0.4f " % shiftX
-            shiftsY = shiftsY + "%0.4f " % shiftY
-        alFrame += 1
-
-    with open(shiftsFn, 'w') as f:
-        shifts = (initShifts + shiftsX + " " + finalShifts + "\n"
-                  + initShifts + shiftsY + " " + finalShifts)
-        f.write(shifts)
-
-
 def readSetOfCoordinates(workDir, micSet, coordSet):
-    """ Read from cisTEM .plt files. """
+    """ Read coordinates from cisTEM .plt files.
+    :param workDir: input folder with coord files
+    :param micSet: input set of mics
+    :param coordSet: output set of coords
+    """
     for mic in micSet:
         micCoordFn = join(workDir, replaceBaseExt(mic.getFileName(), 'plt'))
         readCoordinates(mic, micCoordFn, coordSet)
 
 
 def readCoordinates(mic, fn, coordsSet):
+    """ Parse coords file and populate coordsSet.
+    :param mic: input micrograph object
+    :param fn: input file to parse
+    :param coordsSet: output set of coords
+    """
     if exists(fn):
         with open(fn, 'r') as f:
             for line in f:
@@ -200,11 +198,9 @@ def readCoordinates(mic, fn, coordsSet):
 
 
 def writeReferences(inputSet, outputFn):
-    """
-    Write references star and stack files from SetOfAverages or SetOfClasses2D.
-    Params:
-        inputSet: the input SetOfParticles to be converted
-        outputFn: where to write the output files.
+    """ Write 2D references stack file from SetOfAverages or SetOfClasses2D.
+    :param inputSet: the input SetOfParticles to be converted
+    :param outputFn: where to write the output files.
     """
     ih = ImageHandler()
 
@@ -220,13 +216,15 @@ def writeReferences(inputSet, outputFn):
         for i, rep in enumerate(inputSet.iterRepresentatives()):
             _convert(rep, i)
     else:
-        raise Exception('Invalid object type: %s' % type(inputSet))
+        raise TypeError('Invalid object type: %s' % type(inputSet))
 
 
 def rowToAlignment(alignmentRow, samplingRate):
-    """
-    Return an Transform object representing the Alignment
+    """ Return an Transform object representing the Alignment
     from a given parFile row.
+    :param alignmentRow: input row object
+    :param samplingRate: input pixel size
+    :return Transform object
     """
     angles = np.zeros(3)
     shifts = np.zeros(3)
@@ -235,6 +233,7 @@ def rowToAlignment(alignmentRow, samplingRate):
     angles[0] = float(alignmentRow.get('PSI'))
     angles[1] = float(alignmentRow.get('THETA'))
     angles[2] = float(alignmentRow.get('PHI'))
+    # shifts are converted from Angstroms to px
     shifts[0] = float(alignmentRow.get('SHX')) / samplingRate
     shifts[1] = float(alignmentRow.get('SHY')) / samplingRate
 
@@ -245,8 +244,11 @@ def rowToAlignment(alignmentRow, samplingRate):
 
 
 def matrixFromGeometry(shifts, angles):
-    """ Create the transformation matrix from a given
-    2D shifts in X and Y...and the 3 euler angles.
+    """ Create the transformation matrix from given
+    2D shifts in X and Y and the 3 euler angles.
+    :param shifts: input list of shifts
+    :param angles: input list of angles
+    :return matrix
     """
     radAngles = -np.deg2rad(angles)
 
@@ -259,6 +261,10 @@ def matrixFromGeometry(shifts, angles):
 
 
 def geometryFromMatrix(matrix):
+    """ Convert the transformation matrix to shifts and angles.
+    :param matrix: input matrix
+    :return: two lists, shifts and angles
+    """
     matrix = np.linalg.inv(matrix)
     shifts = -transformations.translation_from_matrix(matrix)
     angles = -np.rad2deg(transformations.euler_from_matrix(matrix, axes='szyz'))

@@ -28,6 +28,7 @@ import os
 
 import pyworkflow.utils as pwutils 
 from pwem.objects import CTFModel, SetOfParticles
+
 from .convert import readCtfModel, readSetOfParticles
 
 
@@ -38,6 +39,11 @@ class GrigorieffLabImportCTF:
         self.copyOrLink = self.protocol.getCopyOrLink()
 
     def importCTF(self, mic, fileName):
+        """ Create a CTF model and populate its values.
+        :param mic: input micrograph object
+        :param fileName: input file to be parsed
+        :return: CTFModel object
+        """
         ctf = CTFModel()
         ctf.setMicrograph(mic)
         readCtfModel(ctf, fileName)
@@ -50,7 +56,7 @@ class GrigorieffLabImportCTF:
                            fnBase.replace('_ctffind4', '')]
             for prefix in psdPrefixes:
                 psdFile = prefix + suffix
-                if os.path.exists(psdFile):
+                if pwutils.exists(psdFile):
                     if psdFile.endswith('.ctf'):
                         psdFile += ':mrc'
                     ctf.setPsdFile(psdFile)
@@ -60,8 +66,10 @@ class GrigorieffLabImportCTF:
 
 
 class GrigorieffLabImportParticles:
-    """ Import particles from a Frealign refinement. """
-
+    """ Import particles from a Frealign refinement.
+    :param parFile: the filename of the parameter file with the alignment
+    :param stackFile: single stack file with the images
+    """
     def __init__(self, protocol, parFile, stackFile):
         self.protocol = protocol
         self.copyOrLink = self.protocol.getCopyOrLink()
@@ -74,11 +82,6 @@ class GrigorieffLabImportParticles:
         self.protocol.fillAcquisition(partSet.getAcquisition())
 
     def importParticles(self):
-        """ Import particles from Frealign.
-        Params:
-            parFile: the filename of the parameter file with the alignment in Frealign.
-            stackFile: single stack file with the images.
-        """
         partSet = self.protocol._createSetOfParticles()
         partSet.setObjComment('Particles imported from Frealign parfile:\n%s' % self.parFile)
 
@@ -100,5 +103,6 @@ class GrigorieffLabImportParticles:
         self.protocol._defineOutputs(outputParticles=partSet)
 
     def validateParticles(self):
+        """ Overwrite the base class. """
         errors = []
         return errors
