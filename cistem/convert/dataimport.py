@@ -56,7 +56,7 @@ class GrigorieffLabImportCTF:
                            fnBase.replace('_ctffind4', '')]
             for prefix in psdPrefixes:
                 psdFile = prefix + suffix
-                if pwutils.exists(psdFile):
+                if os.path.exists(psdFile):
                     if psdFile.endswith('.ctf'):
                         psdFile += ':mrc'
                     ctf.setPsdFile(psdFile)

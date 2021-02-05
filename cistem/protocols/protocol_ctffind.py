@@ -74,7 +74,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
         ih = emlib.image.ImageHandler()
 
-        if not pwutils.exists(micFn):
+        if not os.path.exists(micFn):
             raise FileNotFoundError("Missing input micrograph: %s" % micFn)
 
         if micFn.endswith('.mrc'):

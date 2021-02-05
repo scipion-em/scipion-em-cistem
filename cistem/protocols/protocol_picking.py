@@ -470,7 +470,7 @@ eof"""
     def _getLogFn(self, mic):
         """ Return output log file. """
         micName = mic.getFileName()
-        return pwutils.join(self._getTmpPath(),
+        return os.path.join(self._getTmpPath(),
                             pwutils.replaceBaseExt(micName, 'log'))
 
     def _getStackFn(self, mic):
@@ -479,7 +479,7 @@ eof"""
     def _getPltFn(self, mic):
         """ Return output plt coords file. """
         micName = mic.getFileName()
-        return pwutils.join(self._getExtraPath(),
+        return os.path.join(self._getExtraPath(),
                             pwutils.replaceBaseExt(micName, 'plt'))
 
     def getInputReferences(self):

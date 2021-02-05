@@ -63,7 +63,7 @@ class Plugin(pwem.Plugin):
         if program == CTFFIND4_BIN:
             # if CTFFIND4_HOME is found, use it
             path = cls.getVar(CTFFIND4_HOME)
-            if pwutils.exists(path):
+            if os.path.exists(path):
                 binary = os.path.join(path, 'bin', program)
             else:
                 binary = os.path.join(cls.getHome(), program)
