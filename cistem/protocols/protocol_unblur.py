@@ -29,7 +29,9 @@
 # **************************************************************************
 
 import time
-from math import ceil
+import os.path
+from math import ceil, pi, sin, cos
+import numpy as np
 from threading import Thread
 
 import pyworkflow.utils as pwutils
@@ -39,6 +41,7 @@ import pyworkflow.protocol.params as params
 from pyworkflow.gui.plotter import Plotter
 from pwem.objects import Image
 from pwem.protocols import ProtAlignMovies
+from pwem import emlib
 
 from cistem import Plugin
 from ..convert import readShiftsMovieAlignment
@@ -188,6 +191,16 @@ class CistemProtUnblur(ProtAlignMovies):
         form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- STEPS functions -----------------------------
+    def _convertInputStep(self):
+      movs = self.inputMovies.get()
+      super()._convertInputStep()
+
+      ext = pwutils.getExt(movs.getFirstItem().getFileName()).lower()
+      if ext in ['.tif', '.tiff']:
+        # Managing tif movie Y flipping by motioncorr2 by flipping also the gain
+        print('Flipping gain to match tiff movies')
+        self.flippedGainFn = self.flipYGain(movs.getGain())
+
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
         self._createTifLink(movie)
@@ -281,6 +294,13 @@ class CistemProtUnblur(ProtAlignMovies):
         return errors
 
     # --------------------------- UTILS functions -----------------------------
+    def determineGainFn(self, inputMovies):
+      if hasattr(self, "flippedGainFn"):
+        gainFn = self.flippedGainFn
+      else:
+        gainFn = inputMovies.getGain()
+      return gainFn
+
     def _getProgram(self):
         """ Return program binary. """
         return Plugin.getProgram(UNBLUR_BIN)
@@ -293,6 +313,7 @@ class CistemProtUnblur(ProtAlignMovies):
         else:
             preExp, dose = 0.0, 0.0
 
+        gainFn = self.determineGainFn(inputMovies)
         args = {'movieName': self._getMovieFn(movie),
                 'micFnName': self._getMicFn(movie),
                 'shiftsFn': self._getShiftsFn(movie),
@@ -312,7 +333,7 @@ class CistemProtUnblur(ProtAlignMovies):
                 'alignFrame0': self.alignFrame0.get(),
                 'alignFrameN': self.alignFrameN.get(),
                 'gainCorrected': 'NO' if inputMovies.getGain() else 'YES',
-                'gainFn': inputMovies.getGain(),
+                'gainFn': gainFn,
                 'preExposureAmount': preExp
                 }
 
@@ -450,6 +471,31 @@ eof\n
     def _createOutputWeightedMicrographs(self):
         return self.doApplyDoseFilter
 
+    def readImage(self, fn):
+        img = emlib.Image()
+        img.read(fn)
+        return img
+
+    def writeImageFromArray(self, array, fn):
+        img = emlib.Image()
+        img.setData(array)
+        img.write(fn)
+
+    def flipYGain(self, gainFn, outFn=None):
+      if outFn == None:
+        ext = pwutils.getExt(gainFn)
+        baseName = os.path.basename(gainFn).replace(ext, '_flipped' + ext)
+        outFn = os.path.abspath(self._getExtraPath(baseName))
+      gainImg = self.readImage(gainFn)
+      imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
+
+      #Flipped X matrix * 180 degrees rotation = flipY
+      #TODO: change by flipY matrix
+      M, angle = np.asarray([[-1, 0, imag_array.shape[1]], [0, 1, 0], [0, 0, 1]]), 180
+      flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
+      self.writeImageFromArray(flipped_array, outFn)
+      return outFn
+
 
 def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     """ Create a plotter with the shift per frame. """
@@ -503,3 +549,26 @@ def createGlobalAlignmentPlot(meanX, meanY, first, pixSize):
     plotter.tightLayout()
 
     return plotter
+
+def rotation(imag, angle, shape, P):
+  '''Rotate a np.array and return also the transformation matrix
+  #imag: np.array
+  #angle: angle in degrees
+  #shape: output shape
+  #P: transform matrix (further transformation in addition to the rotation)'''
+  (hsrc, wsrc) = imag.shape
+  angle *= pi / 180
+  T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
+  R = np.asarray([[cos(angle), sin(angle), 0], [-sin(angle), cos(angle), 0], [0, 0, 1]])
+  M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
+
+  transformed = applyTransform(imag, M, shape)
+  return transformed, M
+
+def applyTransform(imag_array, M, shape):
+    ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
+    '''
+    imag = emlib.Image()
+    imag.setData(imag_array)
+    imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
+    return imag.getData()
