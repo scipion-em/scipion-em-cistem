@@ -198,6 +198,7 @@ class CistemProtUnblur(ProtAlignMovies):
       ext = pwutils.getExt(movs.getFirstItem().getFileName()).lower()
       if ext in ['.tif', '.tiff']:
         # Managing tif movie Y flipping by motioncorr2 by flipping also the gain
+        self.flipY = True
         print('Flipping gain to match tiff movies')
         self.flippedGainFn = self.flipYGain(movs.getGain())
 
@@ -482,6 +483,7 @@ eof\n
         img.write(fn)
 
     def flipYGain(self, gainFn, outFn=None):
+      '''Flips an image in the Y axis'''
       if outFn == None:
         ext = pwutils.getExt(gainFn)
         baseName = os.path.basename(gainFn).replace(ext, '_flipped' + ext)
@@ -489,9 +491,8 @@ eof\n
       gainImg = self.readImage(gainFn)
       imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
 
-      #Flipped X matrix * 180 degrees rotation = flipY
-      #TODO: change by flipY matrix
-      M, angle = np.asarray([[-1, 0, imag_array.shape[1]], [0, 1, 0], [0, 0, 1]]), 180
+      #Flipped Y matrix
+      M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
       flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
       self.writeImageFromArray(flipped_array, outFn)
       return outFn
