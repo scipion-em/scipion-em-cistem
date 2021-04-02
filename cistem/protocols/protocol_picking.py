@@ -28,6 +28,7 @@ import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.constants import PROD
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
 from pwem.constants import RELATION_CTF
@@ -42,6 +43,7 @@ from ..constants import *
 class CistemProtFindParticles(ProtParticlePickingAuto):
     """ Protocol to pick particles (ab-initio or reference-based) using cisTEM. """
     _label = 'find particles'
+    _devStatus = PROD
 
     def __init__(self, **kwargs):
         ProtParticlePickingAuto.__init__(self, **kwargs)

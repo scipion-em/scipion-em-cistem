@@ -31,6 +31,7 @@
 import os
 
 import pyworkflow.utils as pwutils
+from pyworkflow.constants import PROD
 from pwem.protocols import ProtCTFMicrographs
 from pwem.objects import CTFModel
 from pwem import emlib
@@ -45,6 +46,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     https://grigoriefflab.umassmed.edu/ctffind4
     """
     _label = 'ctffind4'
+    _devStatus = PROD
 
     def _defineParams(self, form):
         ProgramCtffind.defineInputParams(form)

@@ -35,6 +35,7 @@ from threading import Thread
 import pyworkflow.utils as pwutils
 
 from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.constants import PROD
 import pyworkflow.protocol.params as params
 from pyworkflow.gui.plotter import Plotter
 from pwem.objects import Image
@@ -49,6 +50,7 @@ class CistemProtUnblur(ProtAlignMovies):
     """ This protocol wraps unblur movie alignment program. """
 
     _label = 'unblur'
+    _devStatus = PROD
     CONVERT_TO_MRC = 'mrc'
 
     def __init__(self, **args):
