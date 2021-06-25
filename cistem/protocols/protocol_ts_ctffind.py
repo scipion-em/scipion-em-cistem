@@ -34,11 +34,11 @@ import pyworkflow.protocol.params as params
 from .program_ctffind import ProgramCtffind
 
 try:
+    from tomo.objects import CTFTomo
     from tomo.protocols import ProtTsEstimateCTF
-except ImportError:
-    raise ImportError(
-        'To use a Tomography protocol scipion-em-tomo plugin is required.'
-        ' See https://github.com/scipion-em/scipion-em-tomo for further details')
+except ImportError as e:
+    if "'tomo'" not in str(e):
+        raise e
 
 
 class ProtTsCtffind(ProtTsEstimateCTF):
@@ -112,9 +112,6 @@ class ProtTsCtffind(ProtTsEstimateCTF):
 
         return errors
 
-    def _summary(self):
-        return [self.summaryVar.get('')]
-
     def _citations(self):
         return ["Mindell2003", "Rohou2015"]
 
@@ -132,5 +129,7 @@ class ProtTsCtffind(ProtTsEstimateCTF):
         """ Parse the CTF object estimated for this Tilt-Image. """
         psd = self.getPsdName(ti)
         outCtf = self._getTmpPath(psd.replace('.mrc', '.txt'))
-        return self._ctfProgram.parseOutputAsCtf(outCtf,
+        ctfModel = self._ctfProgram.parseOutputAsCtf(outCtf,
                                                  psdFile=self._getExtraPath(psd))
+        ctfTomo = CTFTomo.ctfModelToCtfTomo(ctfModel)
+        return ctfTomo
