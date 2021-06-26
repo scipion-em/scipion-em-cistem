@@ -26,10 +26,11 @@
 
 import os
 
-from pwem.protocols import EMProtocol, pwutils
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.constants import BETA
 import pyworkflow.protocol.params as params
+import pyworkflow.utils as pwutils
+from pwem.protocols import EMProtocol
 
 from .program_ctffind import ProgramCtffind
 
@@ -116,12 +117,6 @@ class ProtTsCtffind(ProtTsEstimateCTF):
         return ["Mindell2003", "Rohou2015"]
 
     # --------------------------- UTILS functions -----------------------------
-    def _getArgs(self):
-        """ Redefine a list with parameters that will be passed to the process
-        TiltSeries step.
-        """
-        return []
-
     def getPsdName(self, ti):
         return '%s_PSD.mrc' % self.getTiPrefix(ti)
 
@@ -130,6 +125,7 @@ class ProtTsCtffind(ProtTsEstimateCTF):
         psd = self.getPsdName(ti)
         outCtf = self._getTmpPath(psd.replace('.mrc', '.txt'))
         ctfModel = self._ctfProgram.parseOutputAsCtf(outCtf,
-                                                 psdFile=self._getExtraPath(psd))
+                                                     psdFile=self._getExtraPath(psd))
         ctfTomo = CTFTomo.ctfModelToCtfTomo(ctfModel)
+
         return ctfTomo
