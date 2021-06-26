@@ -59,7 +59,7 @@ class TestBase(BaseTest):
         return cls.protImportTS
 
 
-class TestCtffind4(TestBase):
+class TestCtffind4Ts(TestBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
