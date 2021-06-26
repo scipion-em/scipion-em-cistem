@@ -24,5 +24,14 @@
 # *
 # **************************************************************************
 
+from pyworkflow.tests import DataSet
+
 from .test_protocols_cistem import TestCtffind4
 from .test_protocols_cistem_movies import TestMoviesBase, TestUnblur
+
+
+DataSet(name='tutorialDataImodCTF',
+        folder='tutorialDataImodCTF',
+        files={
+            'tsCtf1': 'WTI042413_1series4.st'
+        })
