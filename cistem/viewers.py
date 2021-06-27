@@ -40,7 +40,6 @@ from pwem.objects import SetOfMovies
 from tomo.objects import SetOfCTFTomoSeries
 
 from .protocols import CistemProtCTFFind, CistemProtUnblur
-from .views_tkinter_tree import CtfEstimationTreeProvider, CtfEstimationListDialog
 
 
 def createCtfPlot(ctfSet, ctfId):
@@ -287,6 +286,8 @@ class CtfEstimationTomoViewer2(Viewer):
         return fig
 
     def visualize(self, obj, windows=None, protocol=None):
+        # JMRT: Local import to avoid importing Tkinter stuff at top level
+        from .views_tkinter_tree import CtfEstimationTreeProvider, CtfEstimationListDialog
         objName = obj.getObjName().split('.')[1]
         for output in self._protocol._iterOutputsNew():
             if output[0] == objName:

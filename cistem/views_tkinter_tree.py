@@ -70,6 +70,7 @@ class CtfEstimationTreeProvider(TreeProvider, ttk.Treeview):
         ttk.Treeview.__init__(self, master, **kw)
         self.protocol = protocol
         self.ctfSeries = outputSetOfCTFTomoSeries
+        self._hasPhaseShift = outputSetOfCTFTomoSeries.getFirstItem().getFirstItem().hasPhaseShift()
         TreeProvider.__init__(self, sortingColumnName=self.COL_CTF_SERIE)
         self.selectedDict = {}
         self.mapper = protocol.mapper
@@ -105,10 +106,6 @@ class CtfEstimationTreeProvider(TreeProvider, ttk.Treeview):
     def objectKey(self, pobj):
         pass
 
-    def showPhaseShiftCol(self):
-        ctfSerie = self.ctfSeries.getFirstItem()
-        return ctfSerie.getFirstItem().hasPhaseShift()
-
     def getColumns(self):
         cols = [
             (self.COL_CTF_SERIE, 100),
@@ -116,18 +113,11 @@ class CtfEstimationTreeProvider(TreeProvider, ttk.Treeview):
             (self.CRITERIA_1, 60),
             (self.COL_CTF_EST_DEFOCUS_U, 100),
             (self.COL_CTF_EST_AST, 150),
+            (self.COL_CTF_EST_RES, 100),
+            (self.COL_CTF_EST_FIT, 100)
         ]
-        if self.showPhaseShiftCol():
-            cols.extend([
-                (self.COL_CTF_EST_PHASE, 150),
-                (self.COL_CTF_EST_RES, 100),
-                (self.COL_CTF_EST_FIT, 100)
-            ])
-        else:
-            cols.extend([
-                (self.COL_CTF_EST_RES, 100),
-                (self.COL_CTF_EST_FIT, 100)
-            ])
+        if self._hasPhaseShift:
+            cols.insert(5, (self.COL_CTF_EST_PHASE, 150))
 
         return cols
 
@@ -159,19 +149,12 @@ class CtfEstimationTreeProvider(TreeProvider, ttk.Treeview):
                       CTFSerieStates.OK if obj.getIsDefocusUDeviationInRange()
                       else CTFSerieStates.FAILED,
                       str("%d" % obj.getDefocusU()),
-                      str("%d" % ast)]
+                      str("%d" % ast),
+                      str("%0.1f" % obj.getResolution()),
+                      str("%0.2f" % obj.getFitQuality())]
 
-            if self.showPhaseShiftCol():
-                values.extend([
-                    str("%0.2f" % phSh),
-                    str("%0.1f" % obj.getResolution()),
-                    str("%0.2f" % obj.getFitQuality())
-                ])
-            else:
-                values.extend([
-                    str("%0.1f" % obj.getResolution()),
-                    str("%0.2f" % obj.getFitQuality())
-                ])
+            if self._hasPhaseShift:
+                values.insert(4, str("%0.2f" % phSh))
 
             opened = False
             selected = False
