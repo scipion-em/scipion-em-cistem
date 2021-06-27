@@ -92,6 +92,8 @@ class ProtTsCtffind(ProtTsEstimateCTF):
             pwutils.moveFile(outputPsd, self._getExtraPath(tsId))
             pwutils.moveFile(outputPsd.replace('.mrc', '.txt'),
                              self._getTmpPath())
+            pwutils.moveFile(outputPsd.replace('.mrc', '_avrot.txt'),
+                             self._getExtraPath(tsId))
         except:
             print("ERROR: Ctffind has failed for %s" % tiFn)
 
