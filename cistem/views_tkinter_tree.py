@@ -32,7 +32,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from pyworkflow.gui import *
 from pyworkflow.gui.tree import TreeProvider
-from pyworkflow.gui.dialog import ListDialog, showInfo
+from pyworkflow.gui.dialog import ListDialog, showInfo, showError
 
 import tomo.objects
 
@@ -101,6 +101,7 @@ class CtfEstimationTreeProvider(TreeProvider, ttk.Treeview):
         return self.ctfSeries
 
     def _sortObjects(self, objects):
+        # TODO
         pass
 
     def objectKey(self, pobj):
@@ -133,6 +134,7 @@ class CtfEstimationTreeProvider(TreeProvider, ttk.Treeview):
         if isinstance(obj, tomo.objects.CTFTomoSeries):
             key = obj.getTsId()
             text = obj.getTsId()
+            # TODO: show avg defocus for TomoSeries
             values = ['', CTFSerieStates.OK if obj.getIsDefocusUDeviationInRange()
                       else CTFSerieStates.FAILED]
             opened = False
@@ -151,7 +153,7 @@ class CtfEstimationTreeProvider(TreeProvider, ttk.Treeview):
                       str("%d" % obj.getDefocusU()),
                       str("%d" % ast),
                       str("%0.1f" % obj.getResolution()),
-                      str("%0.2f" % obj.getFitQuality())]
+                      str("%0.3f" % obj.getFitQuality())]
 
             if self._hasPhaseShift:
                 values.insert(4, str("%0.2f" % phSh))
@@ -234,9 +236,9 @@ class CtfEstimationListDialog(ListDialog):
         self._protocol = protocol
         self._inputSetOfTiltSeries = inputTS
         self._checkedItems = provider._checkedItems
-        # the func below should be implemented in viewers
-        self._show1DPLot = kwargs.pop('plot1Dfunc')
-        self._show2DPLot = kwargs.pop('plot2Dfunc')
+        # the funcs below should be implemented in viewers
+        self._show1DPLot = kwargs.pop('plot1Dfunc', None)
+        self._show2DPLot = kwargs.pop('plot2Dfunc', None)
         ListDialog.__init__(self, parent, title, provider, allowSelect=False,
                             cancelButton=True, **kwargs)
 
@@ -294,13 +296,17 @@ class CtfEstimationListDialog(ListDialog):
                         pwutils.Icon.ACTION_HELP, self._showHelp, sticky='ne')
 
     def _show1DFit(self, event=None):
+        if self._show1DPLot is None:
+            showError('Not implemented',
+                      '1D fit viewer is not implemented by this plugin',
+                      self.parent)
         itemSelected = self.tree.getSelectedItem()
         obj = self.tree.getSelectedObj()
         if self.tree.parent(itemSelected):  # child item
             if obj is not None:
                 for ctfSerie in self.provider.getCTFSeries():
                     if ctfSerie.getTsId() in itemSelected:
-                        # TODO: is ctfSerie ordered by id?
+                        # TODO: sort ctfSerie by id
                         ctfId = int(itemSelected.split('.')[-1])
                         plot = self._show1DPLot(ctfSerie, ctfId)
                         plot.show()
@@ -401,9 +407,7 @@ class CtfEstimationListDialog(ListDialog):
         pw.configure(sashrelief=RAISED)
 
     def _createTree(self, parent):
-
         gui.configureWeigths(parent)
-
         self.tree = CTFEstimationTree(parent, self.provider,
                                       selectmode=self._selectmode)
         item = self.tree.identify_row(0)
@@ -434,17 +438,22 @@ class CtfEstimationListDialog(ListDialog):
         if self.tree.parent(itemSelected):  # child item
             if obj is not None:
                 plotterPanel = tk.Frame(self.bottomRightPanel)
-
-                for ctfSerie in self.provider.getCTFSeries():
-                    if ctfSerie.getTsId() in itemSelected:
-                        ctfId = int(itemSelected.split('.')[-1])
-                        # TODO: is ctfSerie ordered by id?
-                        fig = self._show2DPLot(ctfSerie, ctfId)
-                        canvas = FigureCanvasTkAgg(fig, master=plotterPanel)
-                        canvas.draw()
-                        canvas.get_tk_widget().pack(fill=BOTH, expand=0)
-                        plotterPanel.grid(row=0, column=1, sticky='news')
-                        break
+                if self._show2DPLot is None:
+                    label = tk.Label(plotterPanel,
+                                     text='2D fit viewer is not '
+                                          'implemented by this plugin')
+                    label.grid(row=0, column=0, sticky='news')
+                else:
+                    for ctfSerie in self.provider.getCTFSeries():
+                        if ctfSerie.getTsId() in itemSelected:
+                            ctfId = int(itemSelected.split('.')[-1])
+                            # TODO: sort ctfSerie by id
+                            fig = self._show2DPLot(ctfSerie, ctfId)
+                            canvas = FigureCanvasTkAgg(fig, master=plotterPanel)
+                            canvas.draw()
+                            canvas.get_tk_widget().pack(fill=BOTH, expand=0)
+                            break
+                plotterPanel.grid(row=0, column=1, sticky='news')
 
         else:  # parent item
             if obj is not None:
