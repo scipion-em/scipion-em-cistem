@@ -42,7 +42,7 @@ except ImportError as e:
         raise e
 
 
-class ProtTsCtffind(ProtTsEstimateCTF):
+class CistemProtTsCtffind(ProtTsEstimateCTF):
     """ CTF estimation on a set of tilt series using CTFFIND4. """
     _label = 'tiltseries ctffind4'
     _devStatus = BETA

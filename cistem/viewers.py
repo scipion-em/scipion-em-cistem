@@ -37,7 +37,7 @@ from pwem.viewers import CtfView, EmPlotter, MicrographsView, EmProtocolViewer
 import pwem.viewers.showj as showj
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies
-from tomo.objects import SetOfCTFTomoSeries
+from tomo.viewers.viewers_data import CtfEstimationTomoViewer
 
 from .protocols import CistemProtCTFFind, CistemProtUnblur
 
@@ -231,20 +231,10 @@ class ProtUnblurViewer(EmProtocolViewer):
             setattr(item, "_appendItem", False)
 
 
-class CtfEstimationTomoViewer2(Viewer):
-    """ This class implements a view using Tkinter ListDialog
+class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
+    """ This class implements a view using Tkinter CtfEstimationListDialog
     and the CtfEstimationTreeProvider.
     """
-    _label = 'CTF estimation viewer'
-    _environments = [DESKTOP_TKINTER]
-    _targets = [SetOfCTFTomoSeries]
-
-    def __init__(self, parent, protocol, **kwargs):
-        Viewer.__init__(self, **kwargs)
-        self._tkParent = parent.root
-        self._protocol = protocol
-        self._title = 'CTF estimation viewer'
-
     def plot1D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
         psdFn = ctfModel.getPsdFile()
@@ -284,19 +274,3 @@ class CtfEstimationTomoViewer2(Viewer):
         psdPlot.imshow(img.getData(), cmap='gray')
 
         return fig
-
-    def visualize(self, obj, windows=None, protocol=None):
-        # JMRT: Local import to avoid importing Tkinter stuff at top level
-        from .views_tkinter_tree import CtfEstimationTreeProvider, CtfEstimationListDialog
-        objName = obj.getObjName().split('.')[1]
-        for output in self._protocol._iterOutputsNew():
-            if output[0] == objName:
-                self._outputSetOfCTFTomoSeries = output[1]
-                break
-        self._inputSetOfTiltSeries = self._outputSetOfCTFTomoSeries.getSetOfTiltSeries()
-        self._provider = CtfEstimationTreeProvider(self._tkParent,
-                                                   self._protocol,
-                                                   self._outputSetOfCTFTomoSeries)
-        CtfEstimationListDialog(self._tkParent, self._title, self._provider,
-                                self._protocol, self._inputSetOfTiltSeries,
-                                plot1Dfunc=self.plot1D, plot2Dfunc=self.plot2D)

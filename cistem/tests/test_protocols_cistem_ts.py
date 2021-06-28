@@ -34,7 +34,7 @@ except ImportError as e:
     if "'tomo'" not in str(e):
         raise e
 
-from ..protocols import ProtTsCtffind
+from ..protocols import CistemProtTsCtffind
 
 
 class TestBase(BaseTest):
@@ -78,7 +78,7 @@ class TestCtffind4Ts(TestBase):
 
     def testCtffindTs(self):
         print(magentaStr("\n==> Testing cistem - ctffind:"))
-        protCTF = ProtTsCtffind()
+        protCTF = CistemProtTsCtffind()
         protCTF.inputTiltSeries.set(self.protImportTS.outputTiltSeries)
         self.launchProtocol(protCTF)
 
