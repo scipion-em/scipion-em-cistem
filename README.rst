@@ -87,7 +87,7 @@ Protocols
 ---------
 
 * ctffind4
-* tiltseries ctffind4
+* tilt-series ctffind4
 * unblur
 * find particles
 * classify 2D
