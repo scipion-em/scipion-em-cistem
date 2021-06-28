@@ -42,7 +42,7 @@ except ImportError as e:
         raise e
 
 
-class ProtTsCtffind(ProtTsEstimateCTF):
+class CistemProtTsCtffind(ProtTsEstimateCTF):
     """ CTF estimation on a set of tilt series using CTFFIND4. """
     _label = 'tiltseries ctffind4'
     _devStatus = BETA
@@ -92,6 +92,8 @@ class ProtTsCtffind(ProtTsEstimateCTF):
             pwutils.moveFile(outputPsd, self._getExtraPath(tsId))
             pwutils.moveFile(outputPsd.replace('.mrc', '.txt'),
                              self._getTmpPath())
+            pwutils.moveFile(outputPsd.replace('.mrc', '_avrot.txt'),
+                             self._getExtraPath(tsId))
         except:
             print("ERROR: Ctffind has failed for %s" % tiFn)
 

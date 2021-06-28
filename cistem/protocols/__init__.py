@@ -30,7 +30,7 @@ from .protocol_picking import CistemProtFindParticles
 from .protocol_refine2d import CistemProtRefine2D
 
 try:
-    from .protocol_ts_ctffind import ProtTsCtffind
+    from .protocol_ts_ctffind import CistemProtTsCtffind
 except ImportError as e:
     if "'tomo'" not in str(e):
         raise e
