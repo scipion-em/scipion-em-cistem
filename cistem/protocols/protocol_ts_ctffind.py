@@ -44,7 +44,7 @@ except ImportError as e:
 
 class CistemProtTsCtffind(ProtTsEstimateCTF):
     """ CTF estimation on a set of tilt series using CTFFIND4. """
-    _label = 'tiltseries ctffind4'
+    _label = 'tilt-series ctffind4'
     _devStatus = BETA
 
     def __init__(self, **kwargs):
