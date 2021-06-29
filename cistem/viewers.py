@@ -39,7 +39,7 @@ from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies
 from tomo.viewers.viewers_data import CtfEstimationTomoViewer
 
-from .protocols import CistemProtCTFFind, CistemProtUnblur
+from .protocols import CistemProtCTFFind, CistemProtUnblur, CistemProtTsCtffind
 
 
 def createCtfPlot(ctfSet, ctfId):
@@ -235,13 +235,12 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
     """ This class implements a view using Tkinter CtfEstimationListDialog
     and the CtfEstimationTreeProvider.
     """
+    _targets = [CistemProtTsCtffind]
+
     def plot1D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
         psdFn = ctfModel.getPsdFile()
-        psdBase = os.path.basename(psdFn)
-        fn = os.path.join(os.path.dirname(psdFn),
-                          ctfSet.getTsId(),
-                          removeExt(psdBase) + '_avrot.txt')
+        fn = os.path.join(removeExt(psdFn) + '_avrot.txt')
 
         xplotter = EmPlotter(windowTitle='CTFFind results')
         plot_title = '%s # %d\n' % (ctfSet.getTsId(), ctfId) + getPlotSubtitle(ctfModel)
@@ -262,10 +261,7 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
     def plot2D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
         psdFn = ctfModel.getPsdFile()
-        fn = os.path.join(os.path.dirname(psdFn),
-                          ctfSet.getTsId(),
-                          os.path.basename(psdFn))
-        img = ImageHandler().read(fn)
+        img = ImageHandler().read(psdFn)
         fig = Figure(figsize=(7, 7), dpi=100)
         psdPlot = fig.add_subplot(111)
         psdPlot.get_xaxis().set_visible(False)
