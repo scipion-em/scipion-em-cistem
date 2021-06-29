@@ -127,7 +127,7 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         psd = self.getPsdName(ti)
         outCtf = self._getTmpPath(psd.replace('.mrc', '.txt'))
         ctfModel = self._ctfProgram.parseOutputAsCtf(outCtf,
-                                                     psdFile=self._getExtraPath(psd))
+                                                     psdFile=self._getExtraPath(ti.getTsId(), psd))
         ctfTomo = CTFTomo.ctfModelToCtfTomo(ctfModel)
 
         return ctfTomo
