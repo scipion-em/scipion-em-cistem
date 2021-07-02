@@ -34,13 +34,8 @@ from pwem.protocols import EMProtocol
 
 from .program_ctffind import ProgramCtffind
 
-try:
-    from tomo.objects import CTFTomo
-    from tomo.protocols import ProtTsEstimateCTF
-except ImportError as e:
-    if "'tomo'" not in str(e):
-        raise e
-
+from tomo.objects import CTFTomo
+from tomo.protocols import ProtTsEstimateCTF
 
 class CistemProtTsCtffind(ProtTsEstimateCTF):
     """ CTF estimation on a set of tilt series using CTFFIND4. """
