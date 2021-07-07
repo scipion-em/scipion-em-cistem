@@ -163,8 +163,8 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         if self.streamingBatchSize > 0 or self.inputStreaming:
             # If the input is in streaming, follow the base class policy
             # about inserting new steps and discovery new input/output
-            ProtParticlePickingAuto._insertAllSteps(self)
             self.createOutputStep = self._doNothing
+            ProtParticlePickingAuto._insertAllSteps(self)
         else:
             # If not in streaming, then we will just insert a single step to
             # pick all micrographs at once since it is much faster
