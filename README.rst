@@ -39,7 +39,7 @@ This plugin provide wrappers around several programs of `cisTEM <https://cistem.
 Installation
 ------------
 
-You will need to use `3.0 <https://github.com/I2PC/scipion/releases/tag/V3.0.0>`_ version of Scipion to be able to run these protocols. To install the plugin, you have two options:
+You will need to use 3.0+ version of Scipion to be able to run these protocols. To install the plugin, you have two options:
 
 a) Stable version
 
@@ -87,6 +87,7 @@ Protocols
 ---------
 
 * ctffind4
+* tilt-series ctffind4
 * unblur
 * find particles
 * classify 2D

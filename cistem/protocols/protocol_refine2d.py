@@ -32,6 +32,7 @@ from glob import glob
 from collections import OrderedDict
 
 from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.constants import PROD
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         IntParam, BooleanParam,
                                         StringParam)
@@ -48,6 +49,7 @@ from ..convert import (writeReferences, geometryFromMatrix,
 class CistemProtRefine2D(ProtClassify2D):
     """ Protocol to run 2D classification in cisTEM. """
     _label = 'classify 2D'
+    _devStatus = PROD
 
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)

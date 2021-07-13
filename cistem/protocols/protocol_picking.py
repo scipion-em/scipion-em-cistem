@@ -28,6 +28,7 @@ import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.constants import PROD
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
 from pwem.constants import RELATION_CTF
@@ -42,6 +43,7 @@ from ..constants import *
 class CistemProtFindParticles(ProtParticlePickingAuto):
     """ Protocol to pick particles (ab-initio or reference-based) using cisTEM. """
     _label = 'find particles'
+    _devStatus = PROD
 
     def __init__(self, **kwargs):
         ProtParticlePickingAuto.__init__(self, **kwargs)
@@ -161,8 +163,8 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         if self.streamingBatchSize > 0 or self.inputStreaming:
             # If the input is in streaming, follow the base class policy
             # about inserting new steps and discovery new input/output
-            ProtParticlePickingAuto._insertAllSteps(self)
             self.createOutputStep = self._doNothing
+            ProtParticlePickingAuto._insertAllSteps(self)
         else:
             # If not in streaming, then we will just insert a single step to
             # pick all micrographs at once since it is much faster
@@ -470,7 +472,7 @@ eof"""
     def _getLogFn(self, mic):
         """ Return output log file. """
         micName = mic.getFileName()
-        return pwutils.join(self._getTmpPath(),
+        return os.path.join(self._getTmpPath(),
                             pwutils.replaceBaseExt(micName, 'log'))
 
     def _getStackFn(self, mic):
@@ -479,7 +481,7 @@ eof"""
     def _getPltFn(self, mic):
         """ Return output plt coords file. """
         micName = mic.getFileName()
-        return pwutils.join(self._getExtraPath(),
+        return os.path.join(self._getExtraPath(),
                             pwutils.replaceBaseExt(micName, 'plt'))
 
     def getInputReferences(self):

@@ -26,23 +26,21 @@
 
 import os
 
-from pwem.protocols import EMProtocol, pwutils
 from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.constants import BETA
 import pyworkflow.protocol.params as params
+import pyworkflow.utils as pwutils
+from pwem.protocols import EMProtocol
 
 from .program_ctffind import ProgramCtffind
 
-try:
-    from tomo.protocols import ProtTsEstimateCTF
-except ImportError:
-    raise ImportError(
-        'To use a Tomography protocol scipion-em-tomo plugin is required.'
-        ' See https://github.com/scipion-em/scipion-em-tomo for further details')
+from tomo.objects import CTFTomo
+from tomo.protocols import ProtTsEstimateCTF
 
-
-class ProtTsCtffind(ProtTsEstimateCTF):
+class CistemProtTsCtffind(ProtTsEstimateCTF):
     """ CTF estimation on a set of tilt series using CTFFIND4. """
-    _label = 'tiltseries ctffind4'
+    _label = 'tilt-series ctffind4'
+    _devStatus = BETA
 
     def __init__(self, **kwargs):
         EMProtocol.__init__(self, **kwargs)
@@ -89,6 +87,8 @@ class ProtTsCtffind(ProtTsEstimateCTF):
             pwutils.moveFile(outputPsd, self._getExtraPath(tsId))
             pwutils.moveFile(outputPsd.replace('.mrc', '.txt'),
                              self._getTmpPath())
+            pwutils.moveFile(outputPsd.replace('.mrc', '_avrot.txt'),
+                             self._getExtraPath(tsId))
         except:
             print("ERROR: Ctffind has failed for %s" % tiFn)
 
@@ -110,19 +110,10 @@ class ProtTsCtffind(ProtTsEstimateCTF):
 
         return errors
 
-    def _summary(self):
-        return [self.summaryVar.get('')]
-
     def _citations(self):
         return ["Mindell2003", "Rohou2015"]
 
     # --------------------------- UTILS functions -----------------------------
-    def _getArgs(self):
-        """ Redefine a list with parameters that will be passed to the process
-        TiltSeries step.
-        """
-        return []
-
     def getPsdName(self, ti):
         return '%s_PSD.mrc' % self.getTiPrefix(ti)
 
@@ -130,5 +121,8 @@ class ProtTsCtffind(ProtTsEstimateCTF):
         """ Parse the CTF object estimated for this Tilt-Image. """
         psd = self.getPsdName(ti)
         outCtf = self._getTmpPath(psd.replace('.mrc', '.txt'))
-        return self._ctfProgram.parseOutputAsCtf(outCtf,
-                                                 psdFile=self._getExtraPath(psd))
+        ctfModel = self._ctfProgram.parseOutputAsCtf(outCtf,
+                                                     psdFile=self._getExtraPath(ti.getTsId(), psd))
+        ctfTomo = CTFTomo.ctfModelToCtfTomo(ctfModel)
+
+        return ctfTomo

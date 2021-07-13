@@ -24,14 +24,28 @@
 # *
 # **************************************************************************
 
+import contextlib
+
 from .protocol_ctffind import CistemProtCTFFind
 from .protocol_unblur import CistemProtUnblur
 from .protocol_picking import CistemProtFindParticles
 from .protocol_refine2d import CistemProtRefine2D
 
-try:
-    from .protocol_ts_ctffind import ProtTsCtffind
-except ImportError:
-    raise ImportError(
-        'To use a Tomography protocol scipion-em-tomo plugin is required.'
-        ' See https://github.com/scipion-em/scipion-em-tomo for further details')
+# This is a prototype and will likely be move to pyworkflow soon
+# Once in pyworkflow, this method can be removed and imported from there
+@contextlib.contextmanager
+def weakImport(package):
+    """
+     This method can be use to tolerate imports that may fail, e.g imports
+    :param package: name of the package that is expected to fail
+    """
+    try:
+        yield
+    except ImportError as e:
+        if "'%s'" % package not in str(e):
+            raise e
+
+
+with weakImport('tomo'):
+    from .protocol_ts_ctffind import CistemProtTsCtffind
+

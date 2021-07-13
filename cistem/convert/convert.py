@@ -33,7 +33,7 @@ from pwem.objects import (Coordinate, SetOfClasses2D, SetOfAverages,
 from pwem.constants import ALIGN_PROJ
 from pwem.emlib.image import ImageHandler
 import pwem.convert.transformations as transformations
-from pyworkflow.utils import replaceBaseExt, join, exists
+from pyworkflow.utils import replaceBaseExt, exists
 
 
 HEADER_COLUMNS = ['INDEX', 'PSI', 'THETA', 'PHI', 'SHX', 'SHY', 'MAG',
@@ -174,7 +174,7 @@ def readSetOfCoordinates(workDir, micSet, coordSet):
     :param coordSet: output set of coords
     """
     for mic in micSet:
-        micCoordFn = join(workDir, replaceBaseExt(mic.getFileName(), 'plt'))
+        micCoordFn = os.path.join(workDir, replaceBaseExt(mic.getFileName(), 'plt'))
         readCoordinates(mic, micCoordFn, coordSet)
 
 
