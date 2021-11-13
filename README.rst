@@ -26,16 +26,6 @@ This plugin provide wrappers around several programs of `cisTEM <https://cistem.
         :target: https://pypi.python.org/pypi/scipion-em-cistem
         :alt: Downloads
 
-
-+--------------+----------------+--------------------+
-| prod: |prod| | devel: |devel| | support: |support| |
-+--------------+----------------+--------------------+
-
-.. |prod| image:: http://scipion-test.cnb.csic.es:9980/badges/cistem_prod.svg
-.. |devel| image:: http://scipion-test.cnb.csic.es:9980/badges/cistem_devel.svg
-.. |support| image:: http://scipion-test.cnb.csic.es:9980/badges/cistem_support.svg
-
-
 Installation
 ------------
 
