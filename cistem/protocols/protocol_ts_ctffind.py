@@ -37,6 +37,7 @@ from .program_ctffind import ProgramCtffind
 from tomo.objects import CTFTomo
 from tomo.protocols import ProtTsEstimateCTF
 
+
 class CistemProtTsCtffind(ProtTsEstimateCTF):
     """ CTF estimation on a set of tilt series using CTFFIND4. """
     _label = 'tilt-series ctffind4'
