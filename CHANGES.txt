@@ -1,3 +1,4 @@
+3.1.2 - tolerate absence of tomo plugin
 3.1.1 - add a test for TS ctffind4
 3.1.0:
     - optimize imports

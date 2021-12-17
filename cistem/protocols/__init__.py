@@ -25,7 +25,10 @@
 # **************************************************************************
 
 from .protocol_ctffind import CistemProtCTFFind
-from .protocol_ts_ctffind import CistemProtTsCtffind
 from .protocol_unblur import CistemProtUnblur
 from .protocol_picking import CistemProtFindParticles
 from .protocol_refine2d import CistemProtRefine2D
+from pyworkflow.utils import weakImport
+
+with weakImport("tomo"):
+    from .protocol_ts_ctffind import CistemProtTsCtffind
