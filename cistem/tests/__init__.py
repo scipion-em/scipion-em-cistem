@@ -25,10 +25,13 @@
 # **************************************************************************
 
 from pyworkflow.tests import DataSet
+from pyworkflow.utils import weakImport
 
 from .test_protocols_cistem import TestCtffind4
 from .test_protocols_cistem_movies import TestMoviesBase, TestUnblur
-from .test_protocols_cistem_ts import TestCtffind4Ts
+
+with weakImport('tomo'):
+    from .test_protocols_cistem_ts import TestCtffind4Ts
 
 
 DataSet(name='tutorialDataImodCTF',
