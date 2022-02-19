@@ -67,6 +67,8 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
     def plot2D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
         psdFn = ctfModel.getPsdFile()
+        if not os.path.exists(psdFn):
+            return None
         img = ImageHandler().read(psdFn)
         fig = Figure(figsize=(7, 7), dpi=100)
         psdPlot = fig.add_subplot(111)
