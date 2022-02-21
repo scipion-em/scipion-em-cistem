@@ -34,7 +34,7 @@ from pwem.viewers import EmPlotter
 from pwem.emlib.image import ImageHandler
 from tomo.viewers.viewers_data import CtfEstimationTomoViewer
 from cistem.protocols import CistemProtTsCtffind
-from cistem.viewers.viewers import  getPlotSubtitle, _getValues
+from cistem.viewers.viewers import getPlotSubtitle, _getValues
 
 
 class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
