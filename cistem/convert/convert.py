@@ -116,6 +116,10 @@ def parseCtffind4Output(filename):
                     break
     else:
         print("Warning: Missing file: ", filename)
+    # Check for NaN values
+    for r in result:
+        if np.isnan(r):
+            return None
     return result
 
 
