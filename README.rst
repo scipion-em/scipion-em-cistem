@@ -2,9 +2,7 @@
 cisTEM plugin
 =============
 
-**ATTENTION: This plugin replaces grigoriefflab plugin. You cannot use both of them simultaneously.**
-
-This plugin provide wrappers around several programs of `cisTEM <https://cistem.org>`_ software suite.
+This plugin provides wrappers for several programs of `cisTEM <https://cistem.org>`_ software suite.
 
 .. image:: https://img.shields.io/pypi/v/scipion-em-cistem.svg
         :target: https://pypi.python.org/pypi/scipion-em-cistem
@@ -49,7 +47,7 @@ b) Developer's version
 
     .. code-block::
 
-        scipion installp -p path_to_scipion-em-cistem --devel
+        scipion installp -p /path/to/scipion-em-cistem --devel
 
 cisTEM binaries will be installed automatically with the plugin, but you can also link an existing installation.
 
@@ -64,6 +62,7 @@ To check the installation, simply run one of the following Scipion tests:
    scipion test cistem.tests.test_protocols_cistem.TestCtffind4
    scipion test cistem.tests.test_protocols_cistem.TestFindParticles
    scipion test cistem.tests.test_protocols_cistem.TestRefine2D
+   scipion tests cistem.tests.test_protocols_cistem_ts.TestCtffind4Ts
 
 A complete list of tests can also be seen by executing ``scipion test --show --grep cistem``
 

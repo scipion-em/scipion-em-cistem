@@ -34,7 +34,7 @@ from pwem.viewers import EmPlotter
 from pwem.emlib.image import ImageHandler
 from tomo.viewers.viewers_data import CtfEstimationTomoViewer
 from cistem.protocols import CistemProtTsCtffind
-from cistem.viewers.viewers import  getPlotSubtitle, _getValues
+from cistem.viewers.viewers import getPlotSubtitle, _getValues
 
 
 class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
@@ -67,6 +67,8 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
     def plot2D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
         psdFn = ctfModel.getPsdFile()
+        if not os.path.exists(psdFn):
+            return None
         img = ImageHandler().read(psdFn)
         fig = Figure(figsize=(7, 7), dpi=100)
         psdPlot = fig.add_subplot(111)
