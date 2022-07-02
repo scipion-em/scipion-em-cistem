@@ -34,7 +34,7 @@ from pwem.protocols import EMProtocol
 
 from .program_ctffind import ProgramCtffind
 
-from tomo.objects import CTFTomo
+from tomo.objects import CTFTomo, SetOfCTFTomoSeries
 from tomo.protocols import ProtTsEstimateCTF
 
 
@@ -42,6 +42,7 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
     """ CTF estimation on a set of tilt series using CTFFIND4. """
     _label = 'tilt-series ctffind4'
     _devStatus = BETA
+    _possibleOutputs = {'outputSetOfCTFTomoSeries': SetOfCTFTomoSeries}
 
     def __init__(self, **kwargs):
         EMProtocol.__init__(self, **kwargs)

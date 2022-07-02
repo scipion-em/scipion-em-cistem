@@ -30,6 +30,7 @@ import os
 import re
 from glob import glob
 from collections import OrderedDict
+from enum import Enum
 
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.constants import PROD
@@ -40,16 +41,22 @@ from pyworkflow.utils.path import (makePath, createLink,
                                    cleanPattern, moveFile)
 from pyworkflow.object import Float
 from pwem.protocols import ProtClassify2D
+from pwem.objects import SetOfClasses2D
 
 from cistem import Plugin
 from ..convert import (writeReferences, geometryFromMatrix,
                        rowToAlignment, HEADER_COLUMNS)
 
 
+class outputs(Enum):
+    outputClasses = SetOfClasses2D
+
+
 class CistemProtRefine2D(ProtClassify2D):
     """ Protocol to run 2D classification in cisTEM. """
     _label = 'classify 2D'
     _devStatus = PROD
+    _possibleOutputs = outputs
 
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
@@ -452,7 +459,7 @@ class CistemProtRefine2D(ProtClassify2D):
         classes2D = self._createSetOfClasses2D(partSet.get())
         self._fillClassesFromIter(classes2D, self._lastIter())
 
-        self._defineOutputs(outputClasses=classes2D)
+        self._defineOutputs(**{outputs.outputClasses.name: classes2D})
         self._defineSourceRelation(partSet, classes2D)
 
     # --------------------------- INFO functions ------------------------------
