@@ -92,7 +92,7 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
             pwutils.moveFile(outputPsd.replace('.mrc', '_avrot.txt'),
                              self._getExtraPath(tsId))
         except:
-            print("ERROR: Ctffind has failed for %s" % tiFn)
+            self.error(f"ERROR: Ctffind has failed for {tiFn}")
 
     # --------------------------- INFO functions ------------------------------
     def _validate(self):

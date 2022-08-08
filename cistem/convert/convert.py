@@ -27,6 +27,8 @@
 import os
 import numpy as np
 from collections import OrderedDict
+import logging
+logger = logging.getLogger(__name__)
 
 from pwem.objects import (Coordinate, SetOfClasses2D, SetOfAverages,
                           Transform, CTFModel)
@@ -115,7 +117,7 @@ def parseCtffind4Output(filename):
                     result = tuple(map(float, line.split()[1:7]))
                     break
     else:
-        print("Warning: Missing file: ", filename)
+        logger.error(f"Warning: Missing file: {filename}")
     # Check for NaN values
     for r in result:
         if np.isnan(r):
