@@ -202,12 +202,6 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     def _getCtfOutPath(self, mic):
         return self._getMicExtra(mic, 'ctf.txt')
 
-    def _parseOutput(self, filename):
-        """ Try to find the output estimation parameters
-        from filename. It searches for a first line without #.
-        """
-        return self._ctfProgram.parseOutput(filename)
-
     def _getCTFModel(self, defocusU, defocusV, defocusAngle, psdFile):
         ctf = CTFModel()
         ctf.setStandardDefocus(defocusU, defocusV, defocusAngle)

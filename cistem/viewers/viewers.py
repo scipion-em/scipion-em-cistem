@@ -26,6 +26,8 @@
 # *
 # **************************************************************************
 
+import numpy as np
+
 from pyworkflow.protocol.params import LabelParam
 from pyworkflow.utils import removeExt, cleanPath
 from pyworkflow.viewer import DESKTOP_TKINTER, Viewer
@@ -103,6 +105,11 @@ def _getValues(fn):
                     break
                 i += 1
     return res
+
+
+def _getValuesArray(fn):
+    """ Parse input file and return an array with results. """
+    return np.loadtxt(fn, dtype=np.float, skiprows=5)
 
 
 OBJCMD_CTFFIND4 = "CTFFind plot results"

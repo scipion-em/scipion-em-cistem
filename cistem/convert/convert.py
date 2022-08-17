@@ -103,25 +103,28 @@ def rowToCtfModel(ctfRow, ctfModel):
     ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
 
 
-def parseCtffind4Output(filename):
+def parseCtffind4Output(filename, isStack=False):
     """ Retrieve defocus U, V and angle from the
     output file of the ctffind4 execution.
     :param filename: input file to parse
-    :return: a tuple of CTF values
+    :return: a list of tuples with CTF values
     """
-    result = None
+    result = []
     if os.path.exists(filename):
         with open(filename) as f:
             for line in f:
                 if not line.startswith("#"):
-                    result = tuple(map(float, line.split()[1:7]))
-                    break
+                    values = tuple(map(float, line.split()[1:7]))
+                    # Check for NaN values
+                    if any(np.isnan(i) for i in values):
+                        # Replace the list with a None
+                        values = None
+                    result.append(values)
+                    if not isStack:
+                        break
     else:
         logger.error(f"Warning: Missing file: {filename}")
-    # Check for NaN values
-    for r in result:
-        if np.isnan(r):
-            return None
+
     return result
 
 
@@ -134,17 +137,17 @@ def setWrongDefocus(ctfModel):
     ctfModel.setDefocusAngle(-999)
     
     
-def readCtfModel(ctfModel, filename):
-    """ Set values for the ctfModel.
+def readCtfModelStack(ctfModel, ctfList, item=0):
+    """ Set values for the ctfModel from an input list.
     :param ctfModel: output CTF model
-    :param filename: input file to parse
+    :param ctfList: list with CTF values
+    :param item: which item in the ctfList to use
     """
-    result = parseCtffind4Output(filename)
-    if result is None:
+    if None in ctfList:
         setWrongDefocus(ctfModel)
         ctfFit, ctfResolution, ctfPhaseShift = -999, -999, 0
     else:
-        defocusU, defocusV, defocusAngle, ctfPhaseShift, ctfFit, ctfResolution = result
+        defocusU, defocusV, defocusAngle, ctfPhaseShift, ctfFit, ctfResolution = ctfList[item]
         ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
     ctfModel.setFitQuality(ctfFit)
     ctfModel.setResolution(ctfResolution)
@@ -153,6 +156,15 @@ def readCtfModel(ctfModel, filename):
     ctfPhaseShiftDeg = np.rad2deg(ctfPhaseShift)
     if ctfPhaseShiftDeg != 0:
         ctfModel.setPhaseShift(ctfPhaseShiftDeg)
+
+
+def readCtfModel(ctfModel, filename):
+    """ Shortcut function to read CTFs for non-stacks and set ctfModel values
+    :param ctfModel: output CTF model
+    :param filename: file to parse
+    """
+    result = parseCtffind4Output(filename, isStack=False)
+    readCtfModelStack(ctfModel, result, item=0)
 
 
 def readShiftsMovieAlignment(shiftFn):

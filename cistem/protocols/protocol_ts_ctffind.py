@@ -27,12 +27,14 @@
 import os
 
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.constants import BETA
+from pyworkflow.constants import BETA, SCIPION_DEBUG_NOCLEAN
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
+from pwem.objects import CTFModel
 
 from .program_ctffind import ProgramCtffind
+from ..convert import readCtfModelStack, parseCtffind4Output
 
 from tomo.objects import CTFTomo, SetOfCTFTomoSeries
 from tomo.protocols import ProtTsEstimateCTF
@@ -48,6 +50,7 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         EMProtocol.__init__(self, **kwargs)
         self.stepsExecutionMode = STEPS_PARALLEL
         self.usePowerSpectra = False
+        self.useStacks = True
 
     # -------------------------- DEFINE param functions -----------------------
     def _initialize(self):
@@ -69,30 +72,45 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         ProgramCtffind.defineProcessParams(form)
 
     # --------------------------- STEPS functions -----------------------------
-    def _estimateCtf(self, workingDir, tiFn, ti):
+    def processTiltSeriesStep(self, tsObjId):
+        """ Run ctffind on a whole TS stack at once. """
+        ts = self._getTiltSeries(tsObjId)
+        tsId = ts.getTsId()
+        tmpPrefix = self._getTmpPath(tsId)
+        pwutils.makePath(tmpPrefix)
+
+        tsFn = self.getFilePath(tsObjId, tmpPrefix, ".mrcs")
+        ts.applyTransform(tsFn)
+
+        outputLog = self.getFilePath(tsObjId, tmpPrefix, "_ctf.txt")
+        outputPsd = self.getFilePath(tsObjId, tmpPrefix, "_ctf.mrcs")
+
+        program, args = self._ctfProgram.getCommand(
+            micFn=tsFn,
+            powerSpectraPix=None,
+            ctffindOut=outputLog,
+            ctffindPSD=outputPsd)
+
         try:
-            tsId = ti.getTsId()
-            pwutils.makePath(self._getExtraPath(tsId))
-
-            outputLog = os.path.join(workingDir, 'output-log.txt')
-            outputPsd = os.path.join(workingDir, self.getPsdName(ti))
-
-            program, args = self._ctfProgram.getCommand(
-                micFn=tiFn,
-                powerSpectraPix=None,
-                ctffindOut=outputLog,
-                ctffindPSD=outputPsd)
-
             self.runJob(program, args)
-
             # Move files we want to keep
-            pwutils.moveFile(outputPsd, self._getExtraPath(tsId))
-            pwutils.moveFile(outputPsd.replace('.mrc', '.txt'),
-                             self._getTmpPath())
-            pwutils.moveFile(outputPsd.replace('.mrc', '_avrot.txt'),
-                             self._getExtraPath(tsId))
-        except:
-            self.error(f"ERROR: Ctffind has failed for {tiFn}")
+            pwutils.moveFile(outputPsd, self._getExtraPath())
+            pwutils.moveFile(outputPsd.replace('.mrcs', '_avrot.txt'),
+                             self._getExtraPath())
+
+            ctfResult = parseCtffind4Output(outputLog, isStack=True)
+            psds = self._getExtraPath(tsObjId + "_ctf.mrcs")
+            ctf = CTFModel()
+
+            for i, ti in enumerate(self._tsDict.getTiList(tsId)):
+                ti.setCTF(self.getCtfTi(ctf, ctfResult, i, psds))
+
+            if not pwutils.envVarOn(SCIPION_DEBUG_NOCLEAN):
+                pwutils.cleanPath(tmpPrefix)
+
+            self._tsDict.setFinished(tsId)
+        except Exception as e:
+            self.error(f"ERROR: Ctffind has failed for {tsFn}: {e}")
 
     # --------------------------- INFO functions ------------------------------
     def _validate(self):
@@ -116,15 +134,20 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         return ["Mindell2003", "Rohou2015"]
 
     # --------------------------- UTILS functions -----------------------------
-    def getPsdName(self, ti):
-        return '%s_PSD.mrc' % self.getTiPrefix(ti)
+    def _doInsertTiltImageSteps(self):
+        """ Default True, but if return False, the steps for each
+        TiltImage will not be inserted. """
+        return False
 
-    def getCtf(self, ti):
+    def getFilePath(self, tsObjId, prefix, ext=None):
+        ts = self._getTiltSeries(tsObjId)
+        return os.path.join(prefix,
+                            ts.getFirstItem().parseFileName(extension=ext))
+
+    def getCtfTi(self, ctf, ctfList, tiIndex, psdStack):
         """ Parse the CTF object estimated for this Tilt-Image. """
-        psd = self.getPsdName(ti)
-        outCtf = self._getTmpPath(psd.replace('.mrc', '.txt'))
-        ctfModel = self._ctfProgram.parseOutputAsCtf(outCtf,
-                                                     psdFile=self._getExtraPath(ti.getTsId(), psd))
-        ctfTomo = CTFTomo.ctfModelToCtfTomo(ctfModel)
+        readCtfModelStack(ctf, ctfList, item=tiIndex)
+        ctf.setPsdFile(f"{tiIndex+1}@" + psdStack)
+        ctfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
 
         return ctfTomo
