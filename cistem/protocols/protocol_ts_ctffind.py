@@ -98,7 +98,7 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
             pwutils.moveFile(outputPsd.replace('.mrcs', '_avrot.txt'),
                              self._getExtraPath())
 
-            ctfResult = parseCtffind4Output(outputLog, isStack=True)
+            ctfResult = parseCtffind4Output(outputLog)
             psds = self._getExtraPath(tsObjId + "_ctf.mrcs")
             ctf = CTFModel()
 
@@ -144,9 +144,9 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         return os.path.join(prefix,
                             ts.getFirstItem().parseFileName(extension=ext))
 
-    def getCtfTi(self, ctf, ctfList, tiIndex, psdStack):
+    def getCtfTi(self, ctf, ctfArray, tiIndex, psdStack):
         """ Parse the CTF object estimated for this Tilt-Image. """
-        readCtfModelStack(ctf, ctfList, item=tiIndex)
+        readCtfModelStack(ctf, ctfArray, item=tiIndex)
         ctf.setPsdFile(f"{tiIndex+1}@" + psdStack)
         ctfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
 

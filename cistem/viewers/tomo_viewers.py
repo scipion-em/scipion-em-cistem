@@ -33,8 +33,9 @@ from pyworkflow.utils import removeExt
 from pwem.viewers import EmPlotter
 from pwem.emlib.image import ImageHandler
 from tomo.viewers.viewers_data import CtfEstimationTomoViewer
-from cistem.protocols import CistemProtTsCtffind
-from cistem.viewers.viewers import getPlotSubtitle, _getValuesArray
+
+from ..protocols import CistemProtTsCtffind
+from .viewers import getPlotSubtitle, _getValuesArray
 
 
 class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):

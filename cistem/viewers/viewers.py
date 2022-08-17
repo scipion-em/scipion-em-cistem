@@ -37,7 +37,7 @@ import pwem.viewers.showj as showj
 from pwem.objects import SetOfMovies
 
 
-from cistem.protocols import CistemProtCTFFind, CistemProtUnblur
+from ..protocols import CistemProtCTFFind, CistemProtUnblur
 
 
 def createCtfPlot(ctfSet, ctfId):
@@ -52,7 +52,11 @@ def createCtfPlot(ctfSet, ctfId):
     legendName = ['Amplitude spectrum',
                   'CTF Fit',
                   'Quality of fit']
-    _plotCurves(a, fn)
+
+    res = _getValuesArray(fn)
+    for y in [2, 3, 4]:
+        a.plot(res[0], res[y])
+
     xplotter.showLegend(legendName, loc='upper right')
     a.set_ylim([-0.1, 1.1])
     a.grid(True)
@@ -79,37 +83,9 @@ def getPlotSubtitle(ctf):
     return title
 
 
-def _plotCurves(a, fn):
-    """ Actually plot the curves. """
-    res = _getValues(fn)
-    for y in ['amp', 'fit', 'quality']:
-        a.plot(res['freq'], res[y])
-
-
-def _getValues(fn):
-    """ Parse input file and return a dict with results. """
-    res = dict()
-    with open(fn) as f:
-        i = 0
-        for line in f:
-            line = line.strip()
-            if not line.startswith("#"):
-                if i == 0:
-                    res['freq'] = [float(x) for x in line.split()]
-                elif i == 2:
-                    res['amp'] = [float(x) for x in line.split()]
-                elif i == 3:
-                    res['fit'] = [float(x) for x in line.split()]
-                elif i == 4:
-                    res['quality'] = [float(x) for x in line.split()]
-                    break
-                i += 1
-    return res
-
-
 def _getValuesArray(fn):
     """ Parse input file and return an array with results. """
-    return np.loadtxt(fn, dtype=np.float, skiprows=5)
+    return np.loadtxt(fn, dtype=float, comments="#")
 
 
 OBJCMD_CTFFIND4 = "CTFFind plot results"
