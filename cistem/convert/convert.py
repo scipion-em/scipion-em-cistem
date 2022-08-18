@@ -141,8 +141,8 @@ def readCtfModelStack(ctfModel, ctfArray, item=0):
         setWrongDefocus(ctfModel)
         ctfFit, ctfResolution, ctfPhaseShift = -999, -999, 0
     else:
-        (defocusU, defocusV, defocusAngle, ctfPhaseShift,
-         ctfFit, ctfResolution, _) = values
+        (_, defocusU, defocusV, defocusAngle, ctfPhaseShift,
+         ctfFit, ctfResolution) = values
         ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
     ctfModel.setFitQuality(ctfFit)
     ctfModel.setResolution(ctfResolution)
