@@ -32,6 +32,7 @@ import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from pwem.objects import CTFModel
+from pwem import emlib
 
 from .program_ctffind import ProgramCtffind
 from ..convert import readCtfModelStack, parseCtffind4Output
@@ -58,12 +59,12 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         self._ctfProgram = ProgramCtffind(self)
 
     def _defineProcessParams(self, form):
-        form.addParam('recalculate', params.BooleanParam, default=False,
-                      condition='recalculate',
-                      label="Do recalculate ctf?")
-        form.addParam('continueRun', params.PointerParam, allowsNull=True,
-                      condition='recalculate', label="Input previous run",
-                      pointerClass='ProtTsCtffind')
+        form.addHidden('recalculate', params.BooleanParam, default=False,
+                       condition='recalculate',
+                       label="Do recalculate ctf?")
+        form.addHidden('continueRun', params.PointerParam, allowsNull=True,
+                       condition='recalculate', label="Input previous run",
+                       pointerClass='ProtTsCtffind')
         form.addHidden('sqliteFile', params.FileParam,
                        condition='recalculate',
                        allowsNull=True)
@@ -76,14 +77,18 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         """ Run ctffind on a whole TS stack at once. """
         ts = self._getTiltSeries(tsObjId)
         tsId = ts.getTsId()
-        tmpPrefix = self._getTmpPath(tsId)
-        pwutils.makePath(tmpPrefix)
 
-        tsFn = self.getFilePath(tsObjId, tmpPrefix, ".mrcs")
-        ts.applyTransform(tsFn)
+        tsFn = self._getTmpPath(tsObjId + ".mrcs")
+        ih = emlib.image.ImageHandler()
+        tsInputFn = ts.getFirstItem().getFileName()
 
-        outputLog = self.getFilePath(tsObjId, tmpPrefix, "_ctf.txt")
-        outputPsd = self.getFilePath(tsObjId, tmpPrefix, "_ctf.mrcs")
+        if pwutils.getExt(tsInputFn) in ['.mrc', '.st', '.mrcs']:
+            pwutils.createAbsLink(os.path.abspath(tsInputFn), tsFn)
+        else:
+            ih.convert(tsInputFn, tsFn, emlib.DT_FLOAT)
+
+        outputLog = self._getExtraPath(tsObjId + "_ctf.txt")
+        outputPsd = outputLog.replace(".txt", ".mrcs")
 
         program, args = self._ctfProgram.getCommand(
             micFn=tsFn,
@@ -93,20 +98,15 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
 
         try:
             self.runJob(program, args)
-            # Move files we want to keep
-            pwutils.moveFile(outputPsd, self._getExtraPath())
-            pwutils.moveFile(outputPsd.replace('.mrcs', '_avrot.txt'),
-                             self._getExtraPath())
-
             ctfResult = parseCtffind4Output(outputLog)
-            psds = self._getExtraPath(tsObjId + "_ctf.mrcs")
             ctf = CTFModel()
 
             for i, ti in enumerate(self._tsDict.getTiList(tsId)):
-                ti.setCTF(self.getCtfTi(ctf, ctfResult, i, psds))
+                ti.setCTF(self.getCtfTi(ctf, ctfResult, i, outputPsd))
 
             if not pwutils.envVarOn(SCIPION_DEBUG_NOCLEAN):
-                pwutils.cleanPath(tmpPrefix)
+                pwutils.cleanPath(tsFn)
+                pwutils.cleanPath(outputLog)
 
             self._tsDict.setFinished(tsId)
         except Exception as e:
@@ -138,11 +138,6 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         """ Default True, but if return False, the steps for each
         TiltImage will not be inserted. """
         return False
-
-    def getFilePath(self, tsObjId, prefix, ext=None):
-        ts = self._getTiltSeries(tsObjId)
-        return os.path.join(prefix,
-                            ts.getFirstItem().parseFileName(extension=ext))
 
     def getCtfTi(self, ctf, ctfArray, tiIndex, psdStack):
         """ Parse the CTF object estimated for this Tilt-Image. """

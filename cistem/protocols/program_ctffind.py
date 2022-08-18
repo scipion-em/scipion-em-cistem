@@ -33,7 +33,7 @@ import pyworkflow.protocol.params as params
 
 from cistem import Plugin
 from ..constants import CTFFIND4_BIN
-from ..convert import parseCtffind4Output, readCtfModel
+from ..convert import readCtfModel
 
 
 class ProgramCtffind:
