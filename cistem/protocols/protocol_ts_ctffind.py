@@ -73,21 +73,19 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         ProgramCtffind.defineProcessParams(form)
 
     # --------------------------- STEPS functions -----------------------------
-    def processTiltSeriesStep(self, tsObjId):
+    def processTiltSeriesStep(self, tsId):
         """ Run ctffind on a whole TS stack at once. """
-        ts = self._getTiltSeries(tsObjId)
-        tsId = ts.getTsId()
-
-        tsFn = self._getTmpPath(tsObjId + ".mrcs")
-        ih = emlib.image.ImageHandler()
+        ts = self._getTiltSeries(tsId)
         tsInputFn = ts.getFirstItem().getFileName()
+        tsFn = self._getTmpPath(tsId + ".mrcs")
 
         if pwutils.getExt(tsInputFn) in ['.mrc', '.st', '.mrcs']:
             pwutils.createAbsLink(os.path.abspath(tsInputFn), tsFn)
         else:
+            ih = emlib.image.ImageHandler()
             ih.convert(tsInputFn, tsFn, emlib.DT_FLOAT)
 
-        outputLog = self._getExtraPath(tsObjId + "_ctf.txt")
+        outputLog = self._getExtraPath(tsId + "_ctf.txt")
         outputPsd = outputLog.replace(".txt", ".mrcs")
 
         program, args = self._ctfProgram.getCommand(
