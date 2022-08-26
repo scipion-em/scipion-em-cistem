@@ -33,7 +33,7 @@ import pyworkflow.protocol.params as params
 
 from cistem import Plugin
 from ..constants import CTFFIND4_BIN
-from ..convert import parseCtffind4Output, readCtfModel
+from ..convert import readCtfModel
 
 
 class ProgramCtffind:
@@ -61,10 +61,10 @@ class ProgramCtffind:
         form.addHidden('sqliteFile', params.FileParam, condition='recalculate',
                        allowsNull=True)
 
-        form.addParam('inputType', params.EnumParam, default=1,
-                      label='Estimate using:',
-                      choices=['Movies', 'Micrographs'],
-                      display=params.EnumParam.DISPLAY_HLIST)
+        form.addHidden('inputType', params.EnumParam, default=1,
+                       label='Estimate using:',
+                       choices=['Movies', 'Micrographs'],
+                       display=params.EnumParam.DISPLAY_HLIST)
         form.addParam('inputMicrographs', params.PointerParam, important=True,
                       condition='not recalculate and inputType==1',
                       label='Input micrographs',
@@ -189,14 +189,6 @@ class ProgramCtffind:
         paramDict.update(kwargs)
         return self._program, self._args % paramDict
 
-    def parseOutput(self, filename):
-        """ Retrieve defocus U, V and angle from the
-        output file of the program execution.
-        :param filename: input file to parse
-        :return: a tuple of CTF values
-        """
-        return parseCtffind4Output(filename)
-
     def parseOutputAsCtf(self, filename, psdFile=None):
         """ Parse the output file and build the CTFModel object
         with the values.
@@ -263,6 +255,11 @@ eof\n
                                 '--amplitude-spectrum-input << eof > %(ctffindOut)s')
             args = args.replace('%(samplingRate)f',
                                 '%(powerSpectraPix)f')
+
+        if getattr(protocol, "useStacks", False):
+            args = args.replace('%(micFn)s',
+                                '%(micFn)s\n'
+                                'no')
 
         if protocol.fixAstig:
             args = args.replace('%(fixAstig)s',
