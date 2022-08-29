@@ -33,8 +33,9 @@ from pyworkflow.utils import removeExt
 from pwem.viewers import EmPlotter
 from pwem.emlib.image import ImageHandler
 from tomo.viewers.viewers_data import CtfEstimationTomoViewer
-from cistem.protocols import CistemProtTsCtffind
-from cistem.viewers.viewers import getPlotSubtitle, _getValues
+
+from ..protocols import CistemProtTsCtffind
+from .viewers import getPlotSubtitle, _getValuesArray
 
 
 class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
@@ -42,11 +43,12 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
     and the CtfEstimationTreeProvider.
     """
     _targets = [CistemProtTsCtffind]
+    res_cache = dict()
 
     def plot1D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
         psdFn = ctfModel.getPsdFile()
-        fn = os.path.join(removeExt(psdFn) + '_avrot.txt')
+        fn = os.path.join(removeExt(psdFn) + '_avrot.txt').split("@")[-1]
 
         xplotter = EmPlotter(windowTitle='CTFFind results')
         plot_title = '%s # %d\n' % (ctfSet.getTsId(), ctfId) + getPlotSubtitle(ctfModel)
@@ -55,9 +57,14 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
         legendName = ['Amplitude spectrum',
                       'CTF Fit',
                       'Quality of fit']
-        res = _getValues(fn)
-        for y in ['amp', 'fit', 'quality']:
-            a.plot(res['freq'], res[y])
+
+        if fn not in self.res_cache:
+            self.res_cache[fn] = _getValuesArray(fn)
+
+        # 6 lines per micrograph
+        res = self.res_cache[fn][6*(ctfId-1):6*ctfId]
+        for y in [2, 3, 4]:
+            a.plot(res[0], res[y])
         xplotter.showLegend(legendName, loc='upper right')
         a.set_ylim([-0.1, 1.1])
         a.grid(True)
@@ -66,10 +73,10 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
 
     def plot2D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
-        psdFn = ctfModel.getPsdFile()
+        index, psdFn = ctfModel.getPsdFile().split("@")
         if not os.path.exists(psdFn):
             return None
-        img = ImageHandler().read(psdFn)
+        img = ImageHandler().read((int(index), psdFn))
         fig = Figure(figsize=(7, 7), dpi=100)
         psdPlot = fig.add_subplot(111)
         psdPlot.get_xaxis().set_visible(False)

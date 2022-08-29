@@ -1,3 +1,7 @@
+3.2:
+    - add possible outputs dict
+    - refactor output txt parsing
+    - refactor tilt-series ctffind protocol to work on TS stacks
 3.1.3 - replace NaN values, check for missing psdFile
 3.1.2 - minor changes
 3.1.1 - add a test for TS ctffind4

@@ -125,6 +125,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         ctfModel = self._ctfProgram.parseOutputAsCtf(self._getCtfOutPath(mic),
                                                      psdFile=psd)
         ctfModel.setMicrograph(mic)
+        pwutils.cleanPath(self._getCtfOutPath(mic))
 
         return ctfModel
 
@@ -168,7 +169,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
             methods.append("We calculated the CTF of %s using CTFFind. "
                            % self.getObjectTag('inputMicrographs'))
             methods.append(self.methodsVar.get(''))
-            if getattr(self, 'outputCTF'):
+            if hasattr(self, 'outputCTF'):
                 methods.append('Output CTFs: %s' % self.getObjectTag('outputCTF'))
 
         return methods
@@ -201,12 +202,6 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     def _getCtfOutPath(self, mic):
         return self._getMicExtra(mic, 'ctf.txt')
-
-    def _parseOutput(self, filename):
-        """ Try to find the output estimation parameters
-        from filename. It searches for a first line without #.
-        """
-        return self._ctfProgram.parseOutput(filename)
 
     def _getCTFModel(self, defocusU, defocusV, defocusAngle, psdFile):
         ctf = CTFModel()
