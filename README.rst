@@ -54,28 +54,19 @@ cisTEM binaries will be installed automatically with the plugin, but you can als
     * Default installation path assumed is ``software/em/cistem-1.0.0-beta``, if you want to change it, set *CISTEM_HOME* in ``scipion.conf`` file pointing to the folder where the cisTEM is installed.
     * It's possible to use CTFFIND4 installed separately from cisTEM by defining *CTFFIND4_HOME* variable in ``scipion.conf``. Setting this value will have the priority over Ctffind inside cisTEM.
 
-To check the installation, simply run one of the following Scipion tests:
-
-.. code-block::
-
-   scipion test cistem.tests.test_protocols_cistem_movies.TestUnblur
-   scipion test cistem.tests.test_protocols_cistem.TestCtffind4
-   scipion test cistem.tests.test_protocols_cistem.TestFindParticles
-   scipion test cistem.tests.test_protocols_cistem.TestRefine2D
-   scipion tests cistem.tests.test_protocols_cistem_ts.TestCtffind4Ts
-
-A complete list of tests can also be seen by executing ``scipion test --show --grep cistem``
+A complete list of tests can be seen by executing ``scipion test --show --grep cistem``
 
 Supported versions
 ------------------
 
-1.0.0-beta
-
+* 1.0.0-beta (cistem)
+* 4.1.13, 4.1.14 (ctffind4)
 
 Protocols
 ---------
 
 * ctffind4
+* import tomo CTFs
 * tilt-series ctffind4
 * unblur
 * find particles
