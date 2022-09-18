@@ -34,7 +34,7 @@ from pwem.viewers import EmPlotter
 from pwem.emlib.image import ImageHandler
 from tomo.viewers.viewers_data import CtfEstimationTomoViewer
 
-from ..protocols import CistemProtTsCtffind
+from ..protocols import CistemProtTsCtffind, CistemProtTsImportCtf
 from .viewers import getPlotSubtitle, _getValuesArray
 
 
@@ -42,7 +42,7 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
     """ This class implements a view using Tkinter CtfEstimationListDialog
     and the CtfEstimationTreeProvider.
     """
-    _targets = [CistemProtTsCtffind]
+    _targets = [CistemProtTsCtffind, CistemProtTsImportCtf]
     res_cache = dict()
 
     def plot1D(self, ctfSet, ctfId):
