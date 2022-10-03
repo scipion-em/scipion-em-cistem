@@ -1,3 +1,4 @@
+3.3: add import CTF for tilt-series
 3.2:
     - add possible outputs dict
     - refactor output txt parsing
