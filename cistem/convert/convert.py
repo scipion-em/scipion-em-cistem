@@ -137,7 +137,8 @@ def readCtfModelStack(ctfModel, ctfArray, item=0):
     else:
         values = ctfArray
 
-    if ctfArray is None or np.isnan(values).any(axis=0):
+    if ctfArray is None or np.isnan(values).any(axis=0) or values[1] < 0 or values[2] < 0:
+        logger.debug("Invalid CTF values:", values)
         setWrongDefocus(ctfModel)
         ctfFit, ctfResolution, ctfPhaseShift = -999, -999, 0
     else:
