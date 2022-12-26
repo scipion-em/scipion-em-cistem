@@ -41,7 +41,7 @@ class Plugin(pwem.Plugin):
     _homeVar = CISTEM_HOME
     _pathVars = [CISTEM_HOME]
     _supportedVersions = [V1_0_0]
-    _url = "https://github.com/scipion-em/scipion-em-cistem"
+    _url = "https://cistem.org/"
 
     @classmethod
     def _defineVariables(cls):
