@@ -57,7 +57,8 @@ class TestCtffind4Ts(TestBase):
 
     def testCtffindTs(self):
         print(magentaStr("\n==> Testing cistem - ctffind:"))
-        protCTF = CistemProtTsCtffind()
+        protCTF = CistemProtTsCtffind(lowRes=50, highRes=13,
+                                      minDefocus=40000, maxDefocus=60000)
         protCTF.inputTiltSeries.set(self.protImportTS.outputTiltSeries)
         self.launchProtocol(protCTF)
 
