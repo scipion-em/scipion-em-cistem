@@ -526,8 +526,6 @@ class CistemProtRefine2D(ProtClassify2D):
         # partSet = self._getInputParticlesPointer()
         partSet = self._getInputParticles()
         classes2D = self._createSetOfClasses2D(partSet)
-        self.info(f'Generated Classes2d')
-        self.info(f'Last iteration= {self._lastIter()}')
         self._fillClassesFromIter(classes2D, self._lastIter())
 
         self._defineOutputs(**{outputs.outputClasses.name: classes2D})
