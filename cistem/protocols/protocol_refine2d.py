@@ -523,8 +523,11 @@ class CistemProtRefine2D(ProtClassify2D):
         cleanPattern(dumpFns)
 
     def createOutputStep(self):
-        partSet = self._getInputParticlesPointer()
-        classes2D = self._createSetOfClasses2D(partSet.get())
+        # partSet = self._getInputParticlesPointer()
+        partSet = self._getInputParticles()
+        classes2D = self._createSetOfClasses2D(partSet)
+        self.info(f'Generated Classes2d')
+        self.info(f'Last iteration= {self._lastIter()}')
         self._fillClassesFromIter(classes2D, self._lastIter())
 
         self._defineOutputs(**{outputs.outputClasses.name: classes2D})
@@ -650,13 +653,17 @@ class CistemProtRefine2D(ProtClassify2D):
 
     def _getIterNumber(self, index):
         """ Return the list of iteration files, give the iterTemplate. """
+        
+        def regexKey(x):
+            s = re.search(self._iterRegex,x)
+            return int(s.groups()[0])
+
         result = None
-        files = sorted(glob(self._iterTemplate))
+        files = glob(self._iterTemplate)
+
         if files:
-            f = files[index]
-            s = self._iterRegex.search(f)
-            if s:
-                result = int(s.group(1))  # group 1 is 1 digit iteration number
+            sorted_files = sorted(map(regexKey,files))
+            result = sorted_files[index]
         return result
 
     def _lastIter(self):
