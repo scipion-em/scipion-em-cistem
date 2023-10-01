@@ -177,7 +177,7 @@ class ProgramCtffind:
                            'this value sets the step size for the '
                            'search.')
 
-        form.addParallelSection(threads=2, mpi=1)
+        form.addParallelSection(threads=3)
 
     def getCommand(self, **kwargs):
         """

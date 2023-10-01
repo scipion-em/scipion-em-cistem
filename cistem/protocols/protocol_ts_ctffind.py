@@ -75,8 +75,8 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
     # --------------------------- STEPS functions -----------------------------
     def processTiltSeriesStep(self, tsId):
         """ Run ctffind on a whole TS stack at once. """
-        ts = self._getTiltSeries(tsId)
-        tsInputFn = ts.getFirstItem().getFileName()
+        tiList = self._tsDict.getTiList(tsId)
+        tsInputFn = tiList[0].getFileName()
         tsFn = self._getTmpPath(tsId + ".mrcs")
 
         if pwutils.getExt(tsInputFn) in ['.mrc', '.st', '.mrcs']:
@@ -99,7 +99,7 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
             ctfResult = parseCtffind4Output(outputLog)
             ctf = CTFModel()
 
-            for i, ti in enumerate(self._tsDict.getTiList(tsId)):
+            for i, ti in enumerate(tiList):
                 ti.setCTF(self.getCtfTi(ctf, ctfResult, i, outputPsd))
 
             if not pwutils.envVarOn(SCIPION_DEBUG_NOCLEAN):

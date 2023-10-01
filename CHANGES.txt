@@ -1,3 +1,6 @@
+3.5:
+    - refine2d protocol speed up by @JoQCcoz
+    - attempt to fix running in threads (#68)
 3.4:
     - check for negative defocus
     - update test params for tilt series ctf

@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.4'
+__version__ = '3.5'
 _logo = "cistem_logo.png"
 _references = ['Grant2018']
 
@@ -41,7 +41,7 @@ class Plugin(pwem.Plugin):
     _homeVar = CISTEM_HOME
     _pathVars = [CISTEM_HOME]
     _supportedVersions = [V1_0_0]
-    _url = "https://cistem.org/"
+    _url = "https://github.com/scipion-em/scipion-em-cistem"
 
     @classmethod
     def _defineVariables(cls):
