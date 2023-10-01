@@ -29,12 +29,10 @@
 import os
 import re
 import sys
-import time
 from glob import glob
 from collections import OrderedDict
 from enum import Enum
 import asyncio
-
 
 from pyworkflow.protocol import STEPS_SERIAL
 from pyworkflow.constants import PROD
@@ -43,7 +41,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         StringParam)
 from pyworkflow.utils.path import (makePath, createLink,
                                    cleanPattern, moveFile)
-from pyworkflow.utils import greenStr, magentaStr
+from pyworkflow.utils import greenStr
 from pyworkflow.object import Float
 from pyworkflow.utils.process import buildRunCommand
 from pwem.protocols import ProtClassify2D
@@ -306,22 +304,23 @@ class CistemProtRefine2D(ProtClassify2D):
             depsRefine.append(refineId)
         else:
             refineId = self._insertFunctionStep("refineParallelStep",
-                                                    iterN,
-                                                    paramsDic)
+                                                iterN,
+                                                paramsDic)
             depsRefine.append(refineId)
         return depsRefine
 
-    async def _parallelWorker(self, job_list):  
+    async def _parallelWorker(self, job_list):
         process_list = []
         self.info(greenStr(f'Starting {len(job_list)} parallel refine2d commands.'))
         for job in job_list[:-1]:
-            ##Add without logging to STDOUT to avoid crazy logs
-            process_list.append(await asyncio.create_subprocess_shell(job,cwd=self._getExtraPath()))
+            # Add without logging to STDOUT to avoid crazy logs
+            process_list.append(await asyncio.create_subprocess_shell(job, cwd=self._getExtraPath()))
         self.info(f'Only logging job #{len(job_list)} to avoid polluting the log file.')
-        process_list.append(await asyncio.create_subprocess_shell(job_list[-1],cwd=self._getExtraPath(),stdout=sys.stdout, stderr=sys.stderr))
+        process_list.append(
+            await asyncio.create_subprocess_shell(job_list[-1], cwd=self._getExtraPath(), stdout=sys.stdout,
+                                                  stderr=sys.stderr))
         await asyncio.gather(*[process.wait() for process in process_list])
-            
-                
+
     # --------------------------- STEPS functions -----------------------------
     def continueStep(self, iterN):
         """Create a symbolic link of a previous iteration from a previous run."""
@@ -404,7 +403,7 @@ class CistemProtRefine2D(ProtClassify2D):
         self.runJob(self._getProgram(), cmdArgs,
                     cwd=self._getExtraPath(),
                     env=Plugin.getEnviron())
-        
+
     def prepareRefineStep(self, iterN, job, ptcls_per_job, paramsDic):
         numPtcls = self._getPtclsNumber()
 
@@ -443,10 +442,8 @@ class CistemProtRefine2D(ProtClassify2D):
             'dumpFn': self._getFileName('iter_cls_block', iter=iterN,
                                         block=job)
         })
-        self.runJob
         cmdArgs = argsStr % paramsDic
-        return buildRunCommand(self._getProgram(),numberOfMpi=1,params=cmdArgs,env=Plugin.getEnviron()), paramsDic
-
+        return buildRunCommand(self._getProgram(), numberOfMpi=1, params=cmdArgs, env=Plugin.getEnviron()), paramsDic
 
     def refineParallelStep(self, iterN, paramsDic):
         jobs, ptcls_per_job = self._getJobsParams()
@@ -455,7 +452,7 @@ class CistemProtRefine2D(ProtClassify2D):
             preparedStep, paramsDic = self.prepareRefineStep(iterN, job, ptcls_per_job, paramsDic)
             jobs_list.append(preparedStep)
         loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)        
+        asyncio.set_event_loop(loop)
         asyncio.run(self._parallelWorker(jobs_list))
         loop.close()
 
@@ -523,7 +520,6 @@ class CistemProtRefine2D(ProtClassify2D):
         cleanPattern(dumpFns)
 
     def createOutputStep(self):
-        # partSet = self._getInputParticlesPointer()
         partSet = self._getInputParticles()
         classes2D = self._createSetOfClasses2D(partSet)
         self._fillClassesFromIter(classes2D, self._lastIter())
@@ -539,7 +535,6 @@ class CistemProtRefine2D(ProtClassify2D):
             continueProtocol = self.continueRun.get()
             if (continueProtocol is not None and
                     continueProtocol.getObjId() == self.getObjId()):
-
                 errors.append('In Scipion you must create a new cisTEM run')
                 errors.append('and select the continue option rather than')
                 errors.append('select continue from the same run.')
@@ -651,16 +646,16 @@ class CistemProtRefine2D(ProtClassify2D):
 
     def _getIterNumber(self, index):
         """ Return the list of iteration files, give the iterTemplate. """
-        
+
         def regexKey(x):
-            s = re.search(self._iterRegex,x)
+            s = re.search(self._iterRegex, x)
             return int(s.groups()[0])
 
         result = None
         files = glob(self._iterTemplate)
 
         if files:
-            sorted_files = sorted(map(regexKey,files))
+            sorted_files = sorted(map(regexKey, files))
             result = sorted_files[index]
         return result
 
@@ -869,13 +864,13 @@ eof
         minPercUsed = percUsed
 
         def cap_to_100(perc, maximum=100):
-            perc = min([perc,100])
+            perc = min([perc, 100])
             if maximum == 100:
                 return perc
-            return max([perc,maximum])
+            return max([perc, maximum])
 
         if not autoPerc:
-            return max([percUsed,minPercUsed])
+            return max([percUsed, minPercUsed])
 
         if iter_total < 10:
             return 100.0
