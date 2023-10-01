@@ -28,18 +28,24 @@
 
 import os
 import re
+import sys
+import time
 from glob import glob
 from collections import OrderedDict
 from enum import Enum
+import asyncio
 
-from pyworkflow.protocol import STEPS_PARALLEL
+
+from pyworkflow.protocol import STEPS_SERIAL
 from pyworkflow.constants import PROD
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         IntParam, BooleanParam,
                                         StringParam)
 from pyworkflow.utils.path import (makePath, createLink,
                                    cleanPattern, moveFile)
+from pyworkflow.utils import greenStr, magentaStr
 from pyworkflow.object import Float
+from pyworkflow.utils.process import buildRunCommand
 from pwem.protocols import ProtClassify2D
 from pwem.objects import SetOfClasses2D
 
@@ -60,7 +66,7 @@ class CistemProtRefine2D(ProtClassify2D):
 
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
+        self.stepsExecutionMode = STEPS_SERIAL
 
     def _createFilenameTemplates(self):
         """ Centralize the names of the files. """
@@ -252,7 +258,7 @@ class CistemProtRefine2D(ProtClassify2D):
                            'the data. This option is only available when '
                            '"Auto Percent Used" is not selected.')
 
-        form.addParallelSection(threads=4, mpi=1)
+        form.addParallelSection(threads=4, mpi=0)
 
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
@@ -299,15 +305,23 @@ class CistemProtRefine2D(ProtClassify2D):
                                                 prerequisites=[initParStepId])
             depsRefine.append(refineId)
         else:
-            jobs, ptcls_per_job = self._getJobsParams()
-            for job in range(1, jobs + 1):
-                refineId = self._insertFunctionStep("refineStep",
-                                                    iterN, job,
-                                                    ptcls_per_job,
+            refineId = self._insertFunctionStep("refineParallelStep",
+                                                    iterN,
                                                     paramsDic)
-                depsRefine.append(refineId)
+            depsRefine.append(refineId)
         return depsRefine
 
+    async def _parallelWorker(self, job_list):  
+        process_list = []
+        self.info(greenStr(f'Starting {len(job_list)} parallel refine2d commands.'))
+        for job in job_list[:-1]:
+            ##Add without logging to STDOUT to avoid crazy logs
+            process_list.append(await asyncio.create_subprocess_shell(job,cwd=self._getExtraPath()))
+        self.info(f'Only logging job #{len(job_list)} to avoid polluting the log file.')
+        process_list.append(await asyncio.create_subprocess_shell(job_list[-1],cwd=self._getExtraPath(),stdout=sys.stdout, stderr=sys.stderr))
+        await asyncio.gather(*[process.wait() for process in process_list])
+            
+                
     # --------------------------- STEPS functions -----------------------------
     def continueStep(self, iterN):
         """Create a symbolic link of a previous iteration from a previous run."""
@@ -390,6 +404,60 @@ class CistemProtRefine2D(ProtClassify2D):
         self.runJob(self._getProgram(), cmdArgs,
                     cwd=self._getExtraPath(),
                     env=Plugin.getEnviron())
+        
+    def prepareRefineStep(self, iterN, job, ptcls_per_job, paramsDic):
+        numPtcls = self._getPtclsNumber()
+
+        if job == 1:
+            firstPart = 1
+            lastPart = 1 + int(ptcls_per_job)
+            self.currPtcl = lastPart + 1
+        else:
+            firstPart = self.currPtcl
+            lastPart = firstPart + int(ptcls_per_job)
+            if lastPart > numPtcls:
+                lastPart = numPtcls
+            self.currPtcl = lastPart + 1
+
+        argsStr = self._getRefineArgs()
+        highRes = self._calcHighResLimit(self.finalIter,
+                                         self.highResLimit1.get(),
+                                         self.highResLimit2.get())
+
+        percUsed = self._calcPercUsed(self.finalIter,
+                                      iterN - 1,
+                                      self.numberOfClassAvg.get(),
+                                      numPtcls,
+                                      self.percUsed.get(),
+                                      self.autoPerc)
+
+        paramsDic.update({
+            'output_params': self._getFileName('iter_par_block', iter=iterN,
+                                               block=job),
+            'numberOfClassAvg': 0,  # determined from cls stack
+            'firstPart': firstPart,
+            'lastPart': lastPart,
+            'percUsed': percUsed / 100.0,
+            'highRes': highRes,
+            'dump': 'YES',
+            'dumpFn': self._getFileName('iter_cls_block', iter=iterN,
+                                        block=job)
+        })
+        self.runJob
+        cmdArgs = argsStr % paramsDic
+        return buildRunCommand(self._getProgram(),numberOfMpi=1,params=cmdArgs,env=Plugin.getEnviron()), paramsDic
+
+
+    def refineParallelStep(self, iterN, paramsDic):
+        jobs, ptcls_per_job = self._getJobsParams()
+        jobs_list = []
+        for job in range(1, jobs + 1):
+            preparedStep, paramsDic = self.prepareRefineStep(iterN, job, ptcls_per_job, paramsDic)
+            jobs_list.append(preparedStep)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)        
+        asyncio.run(self._parallelWorker(jobs_list))
+        loop.close()
 
     def refineStep(self, iterN, job, ptcls_per_job, paramsDic):
         numPtcls = self._getPtclsNumber()
@@ -455,8 +523,9 @@ class CistemProtRefine2D(ProtClassify2D):
         cleanPattern(dumpFns)
 
     def createOutputStep(self):
-        partSet = self._getInputParticlesPointer()
-        classes2D = self._createSetOfClasses2D(partSet.get())
+        # partSet = self._getInputParticlesPointer()
+        partSet = self._getInputParticles()
+        classes2D = self._createSetOfClasses2D(partSet)
         self._fillClassesFromIter(classes2D, self._lastIter())
 
         self._defineOutputs(**{outputs.outputClasses.name: classes2D})
@@ -582,13 +651,17 @@ class CistemProtRefine2D(ProtClassify2D):
 
     def _getIterNumber(self, index):
         """ Return the list of iteration files, give the iterTemplate. """
+        
+        def regexKey(x):
+            s = re.search(self._iterRegex,x)
+            return int(s.groups()[0])
+
         result = None
-        files = sorted(glob(self._iterTemplate))
+        files = glob(self._iterTemplate)
+
         if files:
-            f = files[index]
-            s = self._iterRegex.search(f)
-            if s:
-                result = int(s.group(1))  # group 1 is 1 digit iteration number
+            sorted_files = sorted(map(regexKey,files))
+            result = sorted_files[index]
         return result
 
     def _lastIter(self):
@@ -794,51 +867,33 @@ eof
                       numParts, percUsed, autoPerc=True):
         """ Copied from MyRefine2DPanel.cpp of cisTEM. """
         minPercUsed = percUsed
-        if autoPerc:
-            if iter_total < 10:
-                percUsed = 100.0
-            else:
-                if iter_total < 20:
-                    if iter_done < 5:
-                        percUsed = numCls * 300 / numParts * 100.0
-                        if percUsed > 100.0:
-                            percUsed = 100.0
-                    else:
-                        if iter_done < iter_total - 5:
-                            percUsed = numCls * 300 / numParts * 100.0
-                            if percUsed > 100.0:
-                                percUsed = 100.0
-                            elif percUsed < 30:
-                                percUsed = 30.0
-                        else:
-                            percUsed = 100.0
-                elif iter_total < 30:
-                    if iter_done < 10:
-                        percUsed = numCls * 300 / numParts * 100.0
-                        if percUsed > 100.0:
-                            percUsed = 100.0
-                    elif iter_done < iter_total - 5:
-                        percUsed = numCls * 300 / numParts * 100.0
-                        if percUsed > 100.0:
-                            percUsed = 100.0
-                        elif percUsed < 30:
-                            percUsed = 30.0
-                    else:
-                        percUsed = 100.0
-                else:
-                    if iter_done < 15:
-                        percUsed = numCls * 300 / numParts * 100.0
-                        if percUsed > 100.0:
-                            percUsed = 100.0
-                    elif iter_done < iter_total - 5:
-                        percUsed = numCls * 300 / numParts * 100.0
-                        if percUsed > 100.0:
-                            percUsed = 100.0
-                        elif percUsed < 30:
-                            percUsed = 30.0
-                    else:
-                        percUsed = 100.0
-        if percUsed < minPercUsed:
-            percUsed = minPercUsed
 
-        return percUsed
+        def cap_to_100(perc, maximum=100):
+            perc = min([perc,100])
+            if maximum == 100:
+                return perc
+            return max([perc,maximum])
+
+        if not autoPerc:
+            return max([percUsed,minPercUsed])
+
+        if iter_total < 10:
+            return 100.0
+        calculated_perc = numCls * 300 / numParts * 100.0
+        if iter_total < 20:
+            if iter_done < 5:
+                return cap_to_100(calculated_perc)
+            if iter_done < iter_total - 5:
+                return cap_to_100(calculated_perc, maximum=30)
+            return 100
+        if iter_total < 30:
+            if iter_done < 10:
+                return cap_to_100(calculated_perc)
+            elif iter_done < iter_total - 5:
+                return cap_to_100(calculated_perc, maximum=30)
+            return 100
+        if iter_done < 15:
+            return cap_to_100(calculated_perc)
+        if iter_done < iter_total - 5:
+            return cap_to_100(calculated_perc, maximum=30)
+        return 100.0
