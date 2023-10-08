@@ -50,7 +50,7 @@ class outputs(Enum):
 class CistemProtTsImportCtf(ProtTomoImportFiles):
     """ Protocol to import CTF estimation of a tilt-series from CTFFIND4. """
     _label = 'import tomo CTFs'
-    _devStatus = BETA
+    _devStatus = PROD
     _possibleOutputs = outputs
 
     def __init__(self, **args):
