@@ -32,7 +32,7 @@ import os
 from enum import Enum
 
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.constants import BETA
+from pyworkflow.constants import PROD
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pwem.objects import CTFModel, Set

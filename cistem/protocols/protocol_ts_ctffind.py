@@ -27,7 +27,7 @@
 import os
 
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.constants import BETA, SCIPION_DEBUG_NOCLEAN
+from pyworkflow.constants import PROD, SCIPION_DEBUG_NOCLEAN
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
@@ -44,7 +44,7 @@ from tomo.protocols import ProtTsEstimateCTF
 class CistemProtTsCtffind(ProtTsEstimateCTF):
     """ CTF estimation on a set of tilt series using CTFFIND4. """
     _label = 'tilt-series ctffind4'
-    _devStatus = BETA
+    _devStatus = PROD
     _possibleOutputs = {'outputSetOfCTFTomoSeries': SetOfCTFTomoSeries}
 
     def __init__(self, **kwargs):
