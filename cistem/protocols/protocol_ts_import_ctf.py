@@ -187,8 +187,8 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
                 # this is set by the user by using #### format in the pattern
                 match = self._idRegex.match(fileName)
                 if match is None:
-                    raise Exception("File '%s' doesn't match the pattern '%s'"
-                                    % (fileName, self.getPattern()))
+                    raise ValueError("File '%s' doesn't match the pattern '%s'"
+                                     % (fileName, self.getPattern()))
 
             yield fileName
 
