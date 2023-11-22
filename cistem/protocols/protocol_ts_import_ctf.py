@@ -149,6 +149,8 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
 
         return errorMsg
 
+    def allowsDelete(self, obj):
+        return True
     # --------------------------- UTILS functions -----------------------------
     def _getInputTs(self, pointer=False):
         return (self.inputSetOfTiltSeries.get() if not pointer
