@@ -1,3 +1,5 @@
+3.6:
+   - Import TomoCTF allows deletion of outputs that may have been created by yhe CTFTomo viewer.
 3.5:
     - refine2d protocol speed up by @JoQCcoz
     - attempt to fix running in threads (#68)

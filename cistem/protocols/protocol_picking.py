@@ -37,7 +37,7 @@ from pwem import emlib
 
 from cistem import Plugin
 from ..convert import readSetOfCoordinates, writeReferences
-from ..constants import *
+from ..constants import LOW_VARIANCE, FIND_PARTICLES_BIN
 
 
 class CistemProtFindParticles(ProtParticlePickingAuto):

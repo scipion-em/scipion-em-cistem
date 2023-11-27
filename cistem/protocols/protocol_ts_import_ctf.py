@@ -32,7 +32,7 @@ import os
 from enum import Enum
 
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.constants import BETA
+from pyworkflow.constants import PROD
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pwem.objects import CTFModel, Set
@@ -50,7 +50,7 @@ class outputs(Enum):
 class CistemProtTsImportCtf(ProtTomoImportFiles):
     """ Protocol to import CTF estimation of a tilt-series from CTFFIND4. """
     _label = 'import tomo CTFs'
-    _devStatus = BETA
+    _devStatus = PROD
     _possibleOutputs = outputs
 
     def __init__(self, **args):
@@ -149,6 +149,8 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
 
         return errorMsg
 
+    def allowsDelete(self, obj):
+        return True
     # --------------------------- UTILS functions -----------------------------
     def _getInputTs(self, pointer=False):
         return (self.inputSetOfTiltSeries.get() if not pointer
@@ -187,8 +189,8 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
                 # this is set by the user by using #### format in the pattern
                 match = self._idRegex.match(fileName)
                 if match is None:
-                    raise Exception("File '%s' doesn't match the pattern '%s'"
-                                    % (fileName, self.getPattern()))
+                    raise ValueError("File '%s' doesn't match the pattern '%s'"
+                                     % (fileName, self.getPattern()))
 
             yield fileName
 

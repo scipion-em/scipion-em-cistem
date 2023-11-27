@@ -84,7 +84,7 @@ class CistemProtRefine2D(ProtClassify2D):
         parFn = self._getExtraPath(self._getFileName('iter_par',
                                                      iter=0))
         self._iterTemplate = parFn.replace('0', '*')
-        self._iterRegex = re.compile('input_par_(\d{1,2})')
+        self._iterRegex = re.compile(r'input_par_(\d{1,2})')
 
     def _initialize(self):
         self._createFilenameTemplates()

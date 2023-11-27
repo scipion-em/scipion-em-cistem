@@ -275,7 +275,7 @@ class CistemProtUnblur(ProtAlignMovies):
         if self.doComputeMicThumbnail or self.doComputePSD:
             try:
                 from pwem import Domain
-                eman2 = Domain.importFromPlugin('eman2', doRaise=True)
+                _ = Domain.importFromPlugin('eman2', doRaise=True)
             except:
                 errors.append("EMAN2 plugin not found!\nComputing thumbnails "
                               "or PSD requires EMAN2 plugin and binaries installed.")
