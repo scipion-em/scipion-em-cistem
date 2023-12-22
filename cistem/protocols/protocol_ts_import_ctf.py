@@ -27,24 +27,23 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import logging
 import os
 from enum import Enum
-
-from pyworkflow.protocol import STEPS_PARALLEL
+from os.path import dirname, join
 from pyworkflow.constants import PROD
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-from pwem.objects import CTFModel, Set
-
+from pwem.objects import CTFModel
 from ..convert import readCtfModelStack, parseCtffind4Output
-
-from tomo.objects import CTFTomo, CTFTomoSeries, SetOfCTFTomoSeries
+from tomo.objects import CTFTomo, CTFTomoSeries, SetOfCTFTomoSeries, TiltSeries
 from tomo.protocols.protocol_base import ProtTomoImportFiles
+
+logger = logging.getLogger(__name__)
 
 
 class outputs(Enum):
-    outputCTFs = SetOfCTFTomoSeries
+    CTFs = SetOfCTFTomoSeries
 
 
 class CistemProtTsImportCtf(ProtTomoImportFiles):
@@ -55,7 +54,6 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
 
     def __init__(self, **args):
         ProtTomoImportFiles.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
 
     # -------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -79,24 +77,21 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
     # -------------------------- INSERT steps functions ---------------------
     def _insertAllSteps(self):
         self._insertFunctionStep(self.importSetOfCtfTomoSeries)
-        self._insertFunctionStep(self.closeOutputSetsStep)
 
     # --------------------------- STEPS functions -----------------------------
     def importSetOfCtfTomoSeries(self):
         outputCtfs = self._getOutputSet()
         if outputCtfs is None:
             outputCtfs = self._createOutputSet()
-        else:
-            outputCtfs.enableAppend()
 
+        defocusFiles = [fn for fn in self.iterFiles()]
         for ts in self._getInputTs():
             tsId = ts.getTsId()
             tsObjId = ts.getObjId()
-            tsFileName = ts.getFirstItem().parseFileName(extension='')
 
-            for defocusFn in self.iterFiles():
-                if tsFileName == pwutils.removeBaseExt(defocusFn):
-                    print("Parsing file: " + defocusFn)
+            for defocusFn in defocusFiles:
+                if tsId == pwutils.removeBaseExt(defocusFn).replace('_ctf', ''):
+                    logger.info("Parsing file: " + defocusFn)
                     newCTFTomoSeries = CTFTomoSeries()
                     newCTFTomoSeries.copyInfo(ts)
                     newCTFTomoSeries.setTiltSeries(ts)
@@ -105,13 +100,13 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
 
                     outputCtfs.append(newCTFTomoSeries)
 
-                    outputPsd = self._findPsdFile(defocusFn)
+                    outputPsd = self._findPsdFile(defocusFn, tsId)
                     ctfResult = parseCtffind4Output(defocusFn)
                     ctf = CTFModel()
 
                     for i, ti in enumerate(ts):
                         newCtfTomo = self.getCtfTi(ctf, ctfResult, i, outputPsd)
-                        newCtfTomo.setIndex(i+1)
+                        newCtfTomo.setIndex(i + 1)
                         newCTFTomoSeries.append(newCtfTomo)
 
                     newCTFTomoSeries.calculateDefocusUDeviation()
@@ -124,24 +119,42 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
                     newCTFTomoSeries.write(properties=False)
                     outputCtfs.update(newCTFTomoSeries)
 
-    def closeOutputSetsStep(self):
-        self._getOutputSet().setStreamState(Set.STREAM_CLOSED)
-        self._getOutputSet().write()
+                    defocusFiles.remove(defocusFn)
+                    break
+
         self._store()
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
         summary = []
-        if self._getOutputSet() is not None:
-            summary.append("Imported CTF tomo series: %d.\n"
-                           % (self._getOutputSet().getSize()))
+        outSet = self._getOutputSet()
+        if outSet:
+            summary.append("Imported CTF tomo series: *%i*" % (self._getOutputSet().getSize()))
+            inTsIdSet = set(self._getInputTs().getUniqueValues(TiltSeries.TS_ID_FIELD))
+            outTsIdSet = set(outSet.getUniqueValues(TiltSeries.TS_ID_FIELD))
+            nonCommonOutTsIds = inTsIdSet.difference(outTsIdSet)
+            if nonCommonOutTsIds:
+                summary.append(f'Some input TS did not match to the introduced files:\n'
+                               f'\t*Non-matching tsIds = {nonCommonOutTsIds}*')
         else:
             summary.append("Output CTFs not ready yet.")
         return summary
 
     def _validate(self):
         errorMsg = []
-        if not self.getMatchFiles():
+        matchingFiles = self.getMatchFiles()
+        if matchingFiles:
+            tsIdList = self._getInputTs().getUniqueValues(TiltSeries.TS_ID_FIELD)
+            defocusBNames = [pwutils.removeBaseExt(defocusFn).replace('_ctf', '')
+                             for defocusFn in self.iterFiles()]
+            matchResults = list(set(tsIdList) & set(defocusBNames))
+            if not matchResults:
+                errorMsg.append(f'No matching files found.\n'
+                                f'Ctffind files are expected to be named like tsId_ctf_avrot.txt.\n'
+                                f'Present tilt series identifiers (tsId) found in the introduced tilt series are '
+                                f'{tsIdList}.\n'
+                                f'The suffixes "_ctf" or "_avrot" may not be present, they are not mandatory.')
+        else:
             errorMsg.append('Unable to find the files provided:\n\n'
                             '\t-filePath = %s\n'
                             '\t-pattern = %s\n' % (self.filesPath.get(),
@@ -151,29 +164,30 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
 
     def allowsDelete(self, obj):
         return True
+
     # --------------------------- UTILS functions -----------------------------
     def _getInputTs(self, pointer=False):
         return (self.inputSetOfTiltSeries.get() if not pointer
                 else self.inputSetOfTiltSeries)
 
-    def getCtfTi(self, ctf, ctfArray, tiIndex, psdStack=None):
+    @staticmethod
+    def getCtfTi(ctf, ctfArray, tiIndex, psdStack=None):
         """ Parse the CTF object estimated for this Tilt-Image. """
         readCtfModelStack(ctf, ctfArray, item=tiIndex)
         if psdStack is not None:
-            ctf.setPsdFile(f"{tiIndex+1}@" + psdStack)
+            ctf.setPsdFile(f"{tiIndex + 1}@" + psdStack)
         ctfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
 
         return ctfTomo
 
     def _getOutputSet(self):
-        return getattr(self, self._possibleOutputs.outputCTFs.name, None)
+        return getattr(self, self._possibleOutputs.CTFs.name, None)
 
     def _createOutputSet(self):
         outputCtfs = SetOfCTFTomoSeries.create(self._getPath(),
                                                template='CTFmodels%s.sqlite')
         outputCtfs.setSetOfTiltSeries(self._getInputTs(pointer=True))
-        outputCtfs.setStreamState(Set.STREAM_OPEN)
-        self._defineOutputs(**{outputs.outputCTFs.name: outputCtfs})
+        self._defineOutputs(**{outputs.CTFs.name: outputCtfs})
         return outputCtfs
 
     def iterFiles(self):
@@ -211,8 +225,9 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
 
         return allowedFiles
 
-    def _findPsdFile(self, fn):
-        fnBase = pwutils.removeExt(fn)
+    @staticmethod
+    def _findPsdFile(fn, tsId):
+        fnBase = join(dirname(fn), tsId)
         for suffix in ['_psd.mrc', '.mrc', '_ctf.mrcs',
                        '.mrcs', '.ctf']:
             psdFile = fnBase + suffix

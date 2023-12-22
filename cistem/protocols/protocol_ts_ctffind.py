@@ -1,8 +1,11 @@
 # **************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
+# * Authors:     Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [1]
+# *              Scipion Team (scipion@cnb.csic.es) [2]
 # *
-# * [1] SciLifeLab, Stockholm University
+# * [1] MRC Laboratory of Molecular Biology (MRC-LMB)
+# * [2] National Center of Biotechnology, CSIC, Spain
+# *
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -25,45 +28,59 @@
 # **************************************************************************
 
 import os
+from enum import Enum
 
+from pwem.protocols import EMProtocol
+from pyworkflow.object import Set
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.constants import PROD, SCIPION_DEBUG_NOCLEAN
+from pyworkflow.constants import PROD
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-from pwem.protocols import EMProtocol
 from pwem.objects import CTFModel
 from pwem import emlib
-
+from collections import namedtuple
+from tomo.protocols.protocol_ts_estimate_ctf import createCtfParams
 from .program_ctffind import ProgramCtffind
 from ..convert import readCtfModelStack, parseCtffind4Output
+from tomo.objects import CTFTomo, SetOfCTFTomoSeries, CTFTomoSeries
 
-from tomo.objects import CTFTomo, SetOfCTFTomoSeries
-from tomo.protocols import ProtTsEstimateCTF
+MRCS_EXT = ".mrcs"
+# create simple, lightweight data structures similar to a class, but without the overhead of defining a full class
+CistemTsCtfMd = namedtuple('CistemTsCtfMd', ['ts', 'tsFn', 'outputLog', 'outputPsd'])
 
 
-class CistemProtTsCtffind(ProtTsEstimateCTF):
+class TsCtffindOutputs(Enum):
+    CTFs = SetOfCTFTomoSeries
+
+
+class CistemProtTsCtffind(EMProtocol):
     """ CTF estimation on a set of tilt series using CTFFIND4. """
     _label = 'tilt-series ctffind4'
     _devStatus = PROD
-    _possibleOutputs = {'outputSetOfCTFTomoSeries': SetOfCTFTomoSeries}
+    _possibleOutputs = TsCtffindOutputs
 
     def __init__(self, **kwargs):
-        EMProtocol.__init__(self, **kwargs)
+        super().__init__(**kwargs)
         self.stepsExecutionMode = STEPS_PARALLEL
         self.usePowerSpectra = False
         self.useStacks = True
+        self.tsCtfMdList = []
+        self.inTsSet = None
 
     # -------------------------- DEFINE param functions -----------------------
-    def _initialize(self):
-        ProtTsEstimateCTF._initialize(self)
-        self._ctfProgram = ProgramCtffind(self)
-
-    def _defineProcessParams(self, form):
-        form.addHidden('recalculate', params.BooleanParam, default=False,
+    def _defineParams(self, form, stream=False):
+        form.addSection(label='Input')
+        form.addParam('inputTiltSeries', params.PointerParam, important=True,
+                      pointerClass='SetOfTiltSeries, SetOfCTFTomoSeries',
+                      label='Input tilt series')
+        form.addHidden('recalculate', params.BooleanParam,
+                       default=False,
                        condition='recalculate',
                        label="Do recalculate ctf?")
-        form.addHidden('continueRun', params.PointerParam, allowsNull=True,
-                       condition='recalculate', label="Input previous run",
+        form.addHidden('continueRun', params.PointerParam,
+                       allowsNull=True,
+                       condition='recalculate',
+                       label="Input previous run",
                        pointerClass='ProtTsCtffind')
         form.addHidden('sqliteFile', params.FileParam,
                        condition='recalculate',
@@ -73,42 +90,91 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         ProgramCtffind.defineProcessParams(form)
 
     # --------------------------- STEPS functions -----------------------------
-    def processTiltSeriesStep(self, tsId):
-        """ Run ctffind on a whole TS stack at once. """
-        tiList = self._tsDict.getTiList(tsId)
-        tsInputFn = tiList[0].getFileName()
-        tsFn = self._getTmpPath(tsId + ".mrcs")
+    def _insertAllSteps(self):
+        self._initialize()
+        pIdList = []
+        for mdObj in self.tsCtfMdList:
+            pidConvert = self._insertFunctionStep(self.convertInputStep, mdObj, prerequisites=[])
+            pidProcess = self._insertFunctionStep(self.processTiltSeriesStep, mdObj, prerequisites=pidConvert)
+            pidCreateOutput = self._insertFunctionStep(self.createOutputStep, mdObj, prerequisites=pidProcess)
+            pIdList.append(pidCreateOutput)
+        self._insertFunctionStep(self.closeStep, prerequisites=pIdList)
 
-        if pwutils.getExt(tsInputFn) in ['.mrc', '.st', '.mrcs']:
-            pwutils.createAbsLink(os.path.abspath(tsInputFn), tsFn)
+    def _initialize(self):
+        self.inTsSet = self._getInputTs()
+        self._params = createCtfParams(self.inTsSet, self.windowSize.get(), self.lowRes.get(), self.highRes.get(),
+                                       self.minDefocus.get(), self.maxDefocus.get())
+        self._ctfProgram = ProgramCtffind(self)
+        for ts in self.inTsSet.iterItems():
+            outputLog = self._getExtraPath(ts.getTsId() + "_ctf.txt")
+            md = CistemTsCtfMd(
+                ts=ts.clone(ignoreAttrs=[]),
+                tsFn=self._getTmpPath(ts.getTsId() + MRCS_EXT),
+                outputLog=outputLog,
+                outputPsd=outputLog.replace(".txt", MRCS_EXT)
+            )
+            self.tsCtfMdList.append(md)
+
+    @staticmethod
+    def convertInputStep(mdObj):
+        tsInputFn = mdObj.ts.getFirstItem().getFileName()
+        if pwutils.getExt(tsInputFn) in ['.mrc', '.st', MRCS_EXT]:
+            pwutils.createAbsLink(os.path.abspath(tsInputFn), mdObj.tsFn)
         else:
             ih = emlib.image.ImageHandler()
-            ih.convert(tsInputFn, tsFn, emlib.DT_FLOAT)
+            ih.convert(tsInputFn, mdObj.tsFn, emlib.DT_FLOAT)
 
-        outputLog = self._getExtraPath(tsId + "_ctf.txt")
-        outputPsd = outputLog.replace(".txt", ".mrcs")
-
+    def processTiltSeriesStep(self, mdObj):
+        """ Run ctffind on a whole TS stack at once. """
         program, args = self._ctfProgram.getCommand(
-            micFn=tsFn,
+            micFn=mdObj.tsFn,
             powerSpectraPix=None,
-            ctffindOut=outputLog,
-            ctffindPSD=outputPsd)
+            ctffindOut=mdObj.outputLog,
+            ctffindPSD=mdObj.outputPsd)
 
         try:
             self.runJob(program, args)
-            ctfResult = parseCtffind4Output(outputLog)
-            ctf = CTFModel()
-
-            for i, ti in enumerate(tiList):
-                ti.setCTF(self.getCtfTi(ctf, ctfResult, i, outputPsd))
-
-            if not pwutils.envVarOn(SCIPION_DEBUG_NOCLEAN):
-                pwutils.cleanPath(tsFn)
-                pwutils.cleanPath(outputLog)
-
-            self._tsDict.setFinished(tsId)
         except Exception as e:
-            self.error(f"ERROR: Ctffind has failed for {tsFn}: {e}")
+            self.error(f"ERROR: Ctffind has failed for {mdObj.tsFn}: {e}")
+
+    def createOutputStep(self, mdObj):
+        outCtfSet = self.getOutputCtfTomoSet()
+
+        if outCtfSet:
+            outCtfSet.enableAppend()
+        else:
+            outCtfSet = SetOfCTFTomoSeries.create(self._getPath(), template='ctfTomoSeriess%s.sqlite')
+            outCtfSet.setSetOfTiltSeries(self.inTsSet)
+            outCtfSet.setStreamState(Set.STREAM_OPEN)
+            self._defineOutputs(**{self._possibleOutputs.CTFs.name: outCtfSet})
+            self._defineSourceRelation(self.inTsSet, outCtfSet)
+
+        ts = mdObj.ts
+        outputLog = mdObj.outputLog
+
+        # Generate the current CTF tomo series item
+        newCTFTomoSeries = CTFTomoSeries()
+        newCTFTomoSeries.copyInfo(ts)
+        newCTFTomoSeries.setTiltSeries(ts)
+        newCTFTomoSeries.setObjId(ts.getObjId())
+        newCTFTomoSeries.setTsId(ts.getTsId())
+        outCtfSet.append(newCTFTomoSeries)
+
+        # Generate the ti CTF and populate the corresponding CTF tomo series
+        ctfResult = parseCtffind4Output(outputLog)
+        ctf = CTFModel()
+        for i, tiltImage in enumerate(ts.iterItems()):
+            ctfTomo = self._getCtfTi(ctf, ctfResult, i, mdObj.outputPsd)
+            ctfTomo.setIndex(tiltImage.getIndex())
+            tiltImage.setCTF(ctfTomo)
+            newCTFTomoSeries.append(ctfTomo)
+
+        outCtfSet.update(newCTFTomoSeries)
+        self._store()
+
+    def closeStep(self):
+        outCtfSet = self.getOutputCtfTomoSet()
+        outCtfSet.setStreamState(Set.STREAM_CLOSED)
 
     # --------------------------- INFO functions ------------------------------
     def _validate(self):
@@ -132,15 +198,25 @@ class CistemProtTsCtffind(ProtTsEstimateCTF):
         return ["Mindell2003", "Rohou2015"]
 
     # --------------------------- UTILS functions -----------------------------
-    def _doInsertTiltImageSteps(self):
-        """ Default True, but if return False, the steps for each
-        TiltImage will not be inserted. """
-        return False
-
-    def getCtfTi(self, ctf, ctfArray, tiIndex, psdStack):
+    @staticmethod
+    def _getCtfTi(ctf, ctfArray, tiIndex, psdStack):
         """ Parse the CTF object estimated for this Tilt-Image. """
         readCtfModelStack(ctf, ctfArray, item=tiIndex)
-        ctf.setPsdFile(f"{tiIndex+1}@" + psdStack)
+        ctf.setPsdFile(f"{tiIndex + 1}@" + psdStack)
         ctfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
-
         return ctfTomo
+
+    def _getInputTs(self, pointer=False):
+        if isinstance(self.inputTiltSeries.get(), SetOfCTFTomoSeries):
+            return self.inputTiltSeries.get().getSetOfTiltSeries(pointer=pointer)
+        return self.inputTiltSeries.get() if not pointer else self.inputTiltSeries
+
+    def getOutputCtfTomoSet(self):
+        return getattr(self, TsCtffindOutputs.CTFs.name, None)
+
+    def getCtfParamsDict(self):
+        """ Return a copy of the global params dict,
+        to avoid overwriting values. """
+        return self._params
+
+
