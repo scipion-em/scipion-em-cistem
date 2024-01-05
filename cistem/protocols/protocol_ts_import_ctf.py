@@ -116,12 +116,11 @@ class CistemProtTsImportCtf(ProtTomoImportFiles):
                             newCTFTomoSeries.getIsDefocusVDeviationInRange()):
                         newCTFTomoSeries.setEnabled(False)
 
-                    newCTFTomoSeries.write(properties=False)
                     outputCtfs.update(newCTFTomoSeries)
-
                     defocusFiles.remove(defocusFn)
                     break
 
+        outputCtfs.write()
         self._store()
 
     # --------------------------- INFO functions ------------------------------

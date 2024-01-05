@@ -1,6 +1,10 @@
 3.7:
+  Users:
    - Improve import TomoCTF matching.
    - Fix TS Ctffind parallelization.
+  Developers:
+   - Update CTF estimation tests with a subset of 2 TS from relion tutorial test dataset.
+   - Add tests for the protocol TS Ctffind import CTF.
 3.6:
    - Import TomoCTF allows deletion of outputs that may have been created by yhe CTFTomo viewer.
 3.5:

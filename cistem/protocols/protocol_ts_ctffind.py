@@ -175,6 +175,8 @@ class CistemProtTsCtffind(EMProtocol):
     def closeStep(self):
         outCtfSet = self.getOutputCtfTomoSet()
         outCtfSet.setStreamState(Set.STREAM_CLOSED)
+        outCtfSet.write()
+        self._store()
 
     # --------------------------- INFO functions ------------------------------
     def _validate(self):
