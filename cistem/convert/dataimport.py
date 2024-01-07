@@ -1,8 +1,10 @@
 # **************************************************************************
 # *
 # * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
+# * Authors:     Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk) [2]
 # *
 # * [1] SciLifeLab, Stockholm University
+# * [2] MRC Laboratory of Molecular Biology (MRC-LMB)
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -24,12 +26,16 @@
 # *
 # **************************************************************************
 
-import os
+import os.path
 
 import pyworkflow.utils as pwutils 
 from pwem.objects import CTFModel, SetOfParticles
 
-from .convert import readCtfModel, readSetOfParticles
+from .convert import (readCtfModel, readSetOfParticles,
+                      readCtfModelStack, parseCtffind4Output)
+
+with pwutils.weakImport('tomo'):
+    from tomo.objects import CTFTomo
 
 
 class GrigorieffLabImportCTF:
@@ -48,10 +54,49 @@ class GrigorieffLabImportCTF:
         ctf.setMicrograph(mic)
         readCtfModel(ctf, fileName)
         
-        # Try to find the given PSD file associated with the cttfind log file
-        # we handle special cases of .ctf extension and _ctffind4 prefix for Relion runs
         fnBase = pwutils.removeExt(fileName)
-        for suffix in ['_psd.mrc', '.mrc', '.ctf']:
+        psdFile = self._findPsdFile(fnBase)
+        ctf.setPsdFile(psdFile)
+
+        return ctf
+
+    def parseTSDefocusFile(self, ts, fileName, output):
+        """ Parse tilt-series ctf estimation file.
+        :param ts: input tilt-series
+        :param fileName: input file to be parsed
+        :param output: output CTFTomoSeries
+        """
+        tsId = ts.getTsId()
+        fnBase = os.path.join(os.path.dirname(fileName), tsId)
+        outputPsd = self._findPsdFile(fnBase)
+        ctfResult = parseCtffind4Output(fileName)
+        ctf = CTFModel()
+
+        for i, ti in enumerate(ts):
+            newCtfTomo = self.getCtfTi(ctf, ctfResult, i, outputPsd)
+            newCtfTomo.setIndex(i + 1)
+            output.append(newCtfTomo)
+
+        output.calculateDefocusUDeviation()
+        output.calculateDefocusVDeviation()
+
+    @staticmethod
+    def getCtfTi(ctf, ctfArray, tiIndex, psdStack=None):
+        """ Parse the CTF object estimated for this Tilt-Image. """
+        readCtfModelStack(ctf, ctfArray, item=tiIndex)
+        if psdStack is not None:
+            ctf.setPsdFile(f"{tiIndex + 1}@" + psdStack)
+        ctfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
+
+        return ctfTomo
+
+    @staticmethod
+    def _findPsdFile(fnBase):
+        """ Try to find the given PSD file associated with the cttfind log file
+        We handle special cases of .ctf extension and _ctffind4 prefix for Relion runs
+        """
+        for suffix in ['_psd.mrc', '.mrc', '_ctf.mrcs',
+                       '.mrcs', '.ctf']:
             psdPrefixes = [fnBase,
                            fnBase.replace('_ctffind4', '')]
             for prefix in psdPrefixes:
@@ -59,10 +104,8 @@ class GrigorieffLabImportCTF:
                 if os.path.exists(psdFile):
                     if psdFile.endswith('.ctf'):
                         psdFile += ':mrc'
-                    ctf.setPsdFile(psdFile)
-                    return ctf
-
-        return ctf
+                    return psdFile
+        return None
 
 
 class GrigorieffLabImportParticles:

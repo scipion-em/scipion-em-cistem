@@ -29,15 +29,13 @@
 from pyworkflow.tests import DataSet, setupTestProject
 from pyworkflow.utils import magentaStr
 
-from tomo.protocols import ProtImportTs
+from tomo.protocols import ProtImportTs, ProtImportTsCTF
 from tomo.tests import RE4_STA_TUTO, DataSetRe4STATuto
 from tomo.tests.test_base_centralized_layer import TestBaseCentralizedLayer
-from ..protocols import CistemProtTsCtffind, CistemProtTsImportCtf
+from ..protocols import CistemProtTsCtffind
 
 
 class TestBase(TestBaseCentralizedLayer):
-    ds = None
-
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -46,14 +44,13 @@ class TestBase(TestBaseCentralizedLayer):
 
     @classmethod
     def _runImportTs(cls):
-        print(magentaStr("\n==> Importing the tilt series:"))
+        print(magentaStr("\n==> Importing data - tilt-series:"))
         protImportTs = cls.newProtocol(ProtImportTs,
                                        filesPath=cls.ds.getFile(DataSetRe4STATuto.tsPath.value),
                                        filesPattern=DataSetRe4STATuto.tsPattern.value,
                                        exclusionWords=DataSetRe4STATuto.exclusionWordsTs03ts54.value,
                                        anglesFrom=2,  # From tlt file
                                        voltage=DataSetRe4STATuto.voltage.value,
-                                       magnification=DataSetRe4STATuto.magnification.value,
                                        sphericalAberration=DataSetRe4STATuto.sphericalAb.value,
                                        amplitudeContrast=DataSetRe4STATuto.amplitudeContrast.value,
                                        samplingRate=DataSetRe4STATuto.unbinnedPixSize.value,
@@ -67,7 +64,6 @@ class TestBase(TestBaseCentralizedLayer):
 
 
 class TestCtffind4Ts(TestBase):
-
     def testCistemCtfFind(self):
         print(magentaStr("\n==> Testing cistem - ctffind:"))
         protCTF = CistemProtTsCtffind(inputTiltSeries=self.inputSoTS,
@@ -82,10 +78,11 @@ class TestCtffind4Ts(TestBase):
         self.checkCTFs(outCtfs, expectedSetSize=2)
 
     def testCistemImportCtfFiles(self):
-        print(magentaStr("\n==> Importing cistem Ctffind files:"))
-        protImport = CistemProtTsImportCtf(filesPath=self.ds.getFile(DataSetRe4STATuto.cistemFilesPath.name),
-                                           filesPattern='*.txt',
-                                           inputSetOfTiltSeries=self.inputSoTS)
+        print(magentaStr("\n==> Importing data - ctffind files:"))
+        protImport = ProtImportTsCTF(filesPath=self.ds.getFile(DataSetRe4STATuto.cistemFilesPath.name),
+                                     filesPattern='*.txt',
+                                     importFrom=0,  # ctffind
+                                     inputSetOfTiltSeries=self.inputSoTS)
         self.launchProtocol(protImport)
         outCtfs = getattr(protImport, protImport._possibleOutputs.CTFs.name, None)
         self.assertIsNotNone(outCtfs, "SetOfCTFTomoSeries has not been produced.")
