@@ -71,9 +71,18 @@ class GrigorieffLabImportCTF:
         outputPsd = self._findPsdFile(fnBase)
         ctfResult = parseCtffind4Output(fileName)
         ctf = CTFModel()
+        counter = 0
 
         for i, ti in enumerate(ts):
-            newCtfTomo = self.getCtfTi(ctf, ctfResult, i, outputPsd)
+            if ti.isEnabled():
+                self.getCtfTi(ctf, ctfResult, counter, outputPsd)
+                counter += 1
+            else:
+                ctf.setWrongDefocus()
+
+            newCtfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
+            if not ti.isEnabled():
+                newCtfTomo.setEnabled(False)
             newCtfTomo.setIndex(i + 1)
             output.append(newCtfTomo)
 
@@ -86,9 +95,6 @@ class GrigorieffLabImportCTF:
         readCtfModelStack(ctf, ctfArray, item=tiIndex)
         if psdStack is not None:
             ctf.setPsdFile(f"{tiIndex + 1}@" + psdStack)
-        ctfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
-
-        return ctfTomo
 
     @staticmethod
     def _findPsdFile(fnBase):

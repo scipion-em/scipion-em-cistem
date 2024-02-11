@@ -49,6 +49,8 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
     def plot1D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
         psdFn = ctfModel.getPsdFile()
+        if psdFn is None:
+            return None
         fn = os.path.join(removeExt(psdFn) + '_avrot.txt').split("@")[-1]
 
         xplotter = EmPlotter(windowTitle='CTFFind results')
@@ -74,7 +76,10 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
 
     def plot2D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
-        index, psdFn = ctfModel.getPsdFile().split("@")
+        psdFn = ctfModel.getPsdFile()
+        if psdFn is None:
+            return None
+        index, psdFn = psdFn.split("@")
         if not os.path.exists(psdFn):
             return None
         img = ImageHandler().read((int(index), psdFn))
