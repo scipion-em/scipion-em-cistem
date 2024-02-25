@@ -23,45 +23,41 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os.path
 
-
-'''
-A protocol to resample tomograms by Fourier cropping/padding using cisTEM.
-'''
-from cistem import Plugin
-from pwem.protocols import EMProtocol
 from pyworkflow import BETA
-from pyworkflow.protocol import PointerParam, IntParam
-from pyworkflow.utils import *
-from tomo.objects import SetOfTomograms, Tomogram
-from pwem.convert.headers import Ccp4Header
+from pyworkflow.protocol.params import PointerParam, IntParam, Positive
+import pyworkflow.utils as pwutils
+from pwem.protocols import EMProtocol
+from tomo.protocols import ProtTomoBase
+from tomo.objects import SetOfTomograms
+
+from cistem import Plugin
 
 OUTPUT_TOMO_NAME = 'resampledTomos'
-OUTPUT_DIR = 'extra/'
 
-class ProtTomoResample(EMProtocol):
-    '''
+
+class CistemProtTomoResample(EMProtocol, ProtTomoBase):
+    """
     Resample tomograms by Fourier cropping/padding using cisTEM. This is equivalent to binning/unbinning operations but free of aliasing artifacts.
 
     More info:
         https://cistem.org
-    '''
+    """
 
     _label = 'resample tomogram'
     _possibleOutputs = {OUTPUT_TOMO_NAME: SetOfTomograms}
     _devStatus = BETA
 
-    tomoList = []
-
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
 
-    # -------------------------- DEFINE param functions ----------------------
+    # -------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
-        ''' Define the input parameters that will be used.
+        """ Define the input parameters that will be used.
         Params:
             form: this is the form to be populated with sections and params.
-        '''
+        """
         #     Example 'resample' input:
         # 
         #     resample
@@ -80,52 +76,46 @@ class ProtTomoResample(EMProtocol):
         # New Y-Size [464]                                   : 464
         # New Z-Size [232]                                   : 232
 
-
         # You need a params to belong to a section:
-        form.addSection(label=Message.LABEL_INPUT)
+        form.addSection(label=pwutils.Message.LABEL_INPUT)
         form.addParam('inTomograms', PointerParam,
-                        pointerClass='SetOfTomograms',
-                        allowsNull=False,
-                        label='Input tomograms')
+                      pointerClass='SetOfTomograms',
+                      label='Input tomograms')
 
         form.addParam('newXsize', IntParam,
-                        default=512,
-                        label='New X-Size',
-                        help='Volume will be rescaled to this size in X dimension (voxels)')
+                      default=512, validators=[Positive],
+                      label='New X-Size',
+                      help='Volume will be rescaled to this size in X dimension (voxels)')
         form.addParam('newYsize', IntParam,
-                        default=512,
-                        label='New Y-Size',
-                        help='Volume will be rescaled to this size in Y dimension (voxels)')
+                      default=512, validators=[Positive],
+                      label='New Y-Size',
+                      help='Volume will be rescaled to this size in Y dimension (voxels)')
         form.addParam('newZsize', IntParam,
-                        default=256,
-                        label='New Z-Size',
-                        help='Volume will be rescaled to this size in Z dimension (voxels)')
+                      default=256, validators=[Positive],
+                      label='New Z-Size',
+                      help='Volume will be rescaled to this size in Z dimension (voxels)')
 
     # -------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-
         for tomo in self.inTomograms.get():
 
             self._insertFunctionStep(self.runTomoResample,
-                        tomo.getFileName())
+                                     tomo.getFileName())
 
         self._insertFunctionStep(self.createOutputStep)
 
-    def runTomoResample(self, tomoFile: str):
+    # --------------------------- STEPS functions -----------------------------
 
+    def runTomoResample(self, tomoFile: str):
         prog = Plugin.getProgram('resample')
 
-
-        tomoBaseName = removeBaseExt(tomoFile)
-        tomoExt = getExt(tomoFile)
-        paramDict = {}
-        paramDict['tomoFile'] = tomoFile
-        paramDict['tomoOutName'] = self.getWorkingDir() + '/' + OUTPUT_DIR + '/' + \
-            tomoBaseName + '_resampled' + tomoExt
-        
-        paramDict['newXsize'] = self.newXsize
-        paramDict['newYsize'] = self.newYsize
-        paramDict['newZsize'] = self.newZsize
+        paramDict = {
+            'tomoFile': tomoFile,
+            'tomoOutName': self._getOutputFn(tomoFile),
+            'newXsize': self.newXsize,
+            'newYsize': self.newYsize,
+            'newZsize': self.newZsize
+        }
 
         # Arguments to the resample command defined in the plugin initialization:
         args = """   << eof
@@ -139,46 +129,39 @@ eof\n
 """
         self.runJob(prog, args % paramDict)
 
-        self.tomoList.append(paramDict['tomoOutName'])
-
     def createOutputStep(self):
-        labelledSet = self._genOutputSetOfTomograms(
-            self.tomoList, 'resampled')
-        self._defineOutputs(**{OUTPUT_TOMO_NAME: labelledSet})
-        self._defineSourceRelation(self.inTomograms.get(), labelledSet)
-
-    def _genOutputSetOfTomograms(self, tomoList, suffix):
-        tomoSet = SetOfTomograms.create(
-            self._getPath(), template='tomograms%s.sqlite', suffix=suffix)
         inTomoSet = self.inTomograms.get()
-        tomoSet.copyInfo(inTomoSet)
+        outTomoSet = self._createSetOfTomograms("resampled")
+        outTomoSet.copyInfo(inTomoSet)
+        outTomoSet.setSamplingRate(self._getOutputSampling())
+        outTomoSet.copyItems(inTomoSet, doClone=False,
+                             updateItemCallback=self._updateItem)
 
-        outSamplingRate = Ccp4Header(tomoList[0], readHeader=True).getSampling()
-        tomoSet.setSamplingRate(outSamplingRate[0])
-
-        counter = 1
-        for file, inTomo in zip(tomoList, inTomoSet):
-            tomo = Tomogram()
-            tomo.copyInfo(inTomo)
-            tomo.setLocation((counter, file))
-            tomoSet.append(tomo)
-            counter += 1    
-
-        return tomoSet
+        self._defineOutputs(**{OUTPUT_TOMO_NAME: outTomoSet})
+        self._defineTransformRelation(self.inTomograms, outTomoSet)
 
     # --------------------------- INFO functions -----------------------------------
     def _citations(self):
+        return ['Grant2018']
 
-        cites = ['Grant2018']
+    # --------------------------- UTILS functions -------------------------------
+    def _updateItem(self, item, row):
+        outputFn = self._getOutputFn(item.getFileName())
+        if os.path.exists(outputFn):
+            item.setFileName(outputFn)
+        else:
+            item._appendItem = False
 
-        return cites
+    def _getOutputFn(self, tomoFile):
+        tomoBaseName = pwutils.removeBaseExt(tomoFile)
+        tomoExt = pwutils.getExt(tomoFile)
+        output = self._getExtraPath(tomoBaseName + '_resampled' + tomoExt)
 
-    def _validate(self):
-        errors = []
-        if self.newXsize <= 0:
-            errors.append('New X size must be greater than zero!')
-        if self.newYsize <= 0:
-            errors.append('New Y size must be greater than zero!')
-        if self.newZsize <= 0:
-            errors.append('New Z size must be greater than zero!')
-        return errors
+        return output
+
+    def _getOutputSampling(self):
+        tomos = self.inTomograms.get()
+        oldSamplingRate = tomos.getSamplingRate()
+        oldXsize = tomos.getFirstItem().getXDim()
+
+        return oldSamplingRate * oldXsize / self.newXsize.get()
