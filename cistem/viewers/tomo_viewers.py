@@ -32,9 +32,10 @@ from matplotlib.figure import Figure
 from pyworkflow.utils import removeExt
 from pwem.viewers import EmPlotter
 from pwem.emlib.image import ImageHandler
+from tomo.protocols import ProtImportTsCTF
 from tomo.viewers.viewers_data import CtfEstimationTomoViewer
 
-from ..protocols import CistemProtTsCtffind, CistemProtTsImportCtf
+from ..protocols import CistemProtTsCtffind
 from .viewers import getPlotSubtitle, _getValuesArray
 
 
@@ -42,12 +43,14 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
     """ This class implements a view using Tkinter CtfEstimationListDialog
     and the CtfEstimationTreeProvider.
     """
-    _targets = [CistemProtTsCtffind, CistemProtTsImportCtf]
+    _targets = [CistemProtTsCtffind, ProtImportTsCTF]
     res_cache = dict()
 
     def plot1D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
         psdFn = ctfModel.getPsdFile()
+        if psdFn is None:
+            return None
         fn = os.path.join(removeExt(psdFn) + '_avrot.txt').split("@")[-1]
 
         xplotter = EmPlotter(windowTitle='CTFFind results')
@@ -73,7 +76,10 @@ class CtfEstimationTomoViewerCistem(CtfEstimationTomoViewer):
 
     def plot2D(self, ctfSet, ctfId):
         ctfModel = ctfSet[ctfId]
-        index, psdFn = ctfModel.getPsdFile().split("@")
+        psdFn = ctfModel.getPsdFile()
+        if psdFn is None:
+            return None
+        index, psdFn = psdFn.split("@")
         if not os.path.exists(psdFn):
             return None
         img = ImageHandler().read((int(index), psdFn))
