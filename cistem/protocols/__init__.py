@@ -32,3 +32,5 @@ from .protocol_refine2d import CistemProtRefine2D
 
 with weakImport('tomo'):
     from .protocol_ts_ctffind import CistemProtTsCtffind
+    from .protocol_tomo_resample import CistemProtTomoResample
+    from .protocol_ts_resample import CistemProtTsResample
