@@ -24,50 +24,42 @@
 # *
 # **************************************************************************
 
-
-'''
-A protocol to resample tilt series by Fourier cropping/padding using cisTEM.
-'''
 # Inspired by protocol_resizeTS.py from scipion-em-xmipptomo:
 # https://github.com/I2PC/scipion-em-xmipptomo/blob/devel/xmipptomo/protocols/protocol_resizeTS.py
 
-from cistem import Plugin
-from tomo.protocols import ProtTomoBase
-import tomo.objects as tomoObj
-from pwem.protocols import EMProtocol
 from pyworkflow import BETA
-from pyworkflow.protocol import PointerParam, IntParam
-from pyworkflow.utils import *
-from pyworkflow.object import Set
-from tomo.objects import SetOfTiltSeries, TiltSeries
-from pwem.emlib.image import ImageHandler
+from pyworkflow.protocol.params import PointerParam, IntParam, Positive
+import pyworkflow.utils as pwutils
+from pwem.protocols import EMProtocol
+from tomo.objects import SetOfTiltSeries
+from tomo.protocols import ProtTomoBase
+
+from cistem import Plugin
 
 OUTPUT_TS_NAME = 'resampledTiltSeries'
-OUTPUT_DIR = 'extra/'
 
-class ProtTsResample(EMProtocol, ProtTomoBase):
-    '''
+
+class CistemProtTsResample(EMProtocol, ProtTomoBase):
+    """
     Resample tilt series by Fourier cropping/padding using cisTEM. This is equivalent to binning/unbinning operations but free of aliasing artifacts.
 
     More info:
         https://cistem.org
-    '''
+    """
 
     _label = 'resample tilt series'
     _possibleOutputs = {OUTPUT_TS_NAME: SetOfTiltSeries}
     _devStatus = BETA
-
-    tsList = []
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
-        ''' Define the input parameters that will be used.
+        """ Define the input parameters that will be used.
         Params:
             form: this is the form to be populated with sections and params.
-        '''
+        """
         #     Example 'resample' input:
         # 
         # resample
@@ -85,53 +77,41 @@ class ProtTsResample(EMProtocol, ProtTomoBase):
         # New X-Size [464]                                   : 928
         # New Y-Size [464]                                   : 928
 
-
         # You need a params to belong to a section:
-        form.addSection(label=Message.LABEL_INPUT)
+        form.addSection(label=pwutils.Message.LABEL_INPUT)
         form.addParam('inputSetOfTiltSeries', PointerParam,
-                        pointerClass='SetOfTiltSeries',
-                        allowsNull=False,
-                        label='Input tilt series')
+                      pointerClass='SetOfTiltSeries',
+                      allowsNull=False,
+                      label='Input tilt series')
 
         form.addParam('newXsize', IntParam,
-                        default=512,
-                        label='New X-Size',
-                        help='Volume will be rescaled to this size in X dimension (voxels)')
+                      default=512, validators=[Positive],
+                      label='New X-Size',
+                      help='Volume will be rescaled to this size in X dimension (voxels)')
         form.addParam('newYsize', IntParam,
-                        default=512,
-                        label='New Y-Size',
-                        help='Volume will be rescaled to this size in Y dimension (voxels)')
+                      default=512, validators=[Positive],
+                      label='New Y-Size',
+                      help='Volume will be rescaled to this size in Y dimension (voxels)')
 
     # -------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-
         for ts in self.inputSetOfTiltSeries.get():
 
             self._insertFunctionStep(self.runTsResample,
-                        ts.getObjId())
+                                     ts.getFirstItem().getFileName())
 
-            self._insertFunctionStep(self.createOutputStep,
-                        ts.getObjId())
-        
-        self._insertFunctionStep('closeStreamStep')
+        self._insertFunctionStep(self.createOutputStep)
 
-    def runTsResample(self, tsObjId):
-
+    # --------------------------- STEPS functions -----------------------------
+    def runTsResample(self, tsFile: str):
         prog = Plugin.getProgram('resample')
 
-        ts = self.inputSetOfTiltSeries.get()[tsObjId]
-        firstItem = ts.getFirstItem()
-        tsFile = firstItem.getFileName()
-
-        tsBaseName = removeBaseExt(tsFile)
-        tsExt = getExt(tsFile)
-        paramDict = {}
-        paramDict['tsFile'] = tsFile
-        paramDict['tsOutName'] = self.getWorkingDir() + '/' + OUTPUT_DIR + '/' + \
-            tsBaseName + '_resampled' + tsExt
-        
-        paramDict['newXsize'] = self.newXsize
-        paramDict['newYsize'] = self.newYsize
+        paramDict = {
+            'tsFile': tsFile,
+            'tsOutName': self._getOutputFn(tsFile),
+            'newXsize': self.newXsize,
+            'newYsize': self.newYsize,
+        }
 
         # Arguments to the resample command defined in the plugin initialization:
         args = """   << eof
@@ -144,86 +124,35 @@ eof\n
 """
         self.runJob(prog, args % paramDict)
 
-        self.tsList.append(paramDict['tsOutName'])
+    def createOutputStep(self):
+        inputTs = self.inputSetOfTiltSeries.get()
+        outTsSet = self._createSetOfTiltSeries()
+        outTsSet.copyInfo(inputTs)
+        outTsSet.setSamplingRate(self._getOutputSampling())
+        outTsSet.copyItems(inputTs, updateTiCallback=self._updateTi)
 
-    def createOutputStep(self, tsObjId):
-        ts = self.inputSetOfTiltSeries.get()[tsObjId]
-
-        firstItem = ts.getFirstItem()
-        tsFile = firstItem.getFileName()
-        tsBaseName = removeBaseExt(tsFile)
-        tsExt = getExt(tsFile)
-
-        tsOutName = self.getWorkingDir() + '/' + OUTPUT_DIR + '/' + \
-            tsBaseName + '_resampled' + tsExt
-
-        tsId = ts.getTsId()
-
-        oldSamplingRate = ts.getSamplingRate()
-        oldXsize = ts.getDim()[0]
-        self.samplingRate = oldSamplingRate * oldXsize / float(self.newXsize)
-
-        outputSetOfTiltSeries = self.getOutputSetOfTiltSeries()
-
-        newTs = TiltSeries(tsId=tsId)
-        newTs.copyInfo(ts)
-        outputSetOfTiltSeries.append(newTs)
-
-        newTs.setSamplingRate(self.samplingRate)
-
-        for index, ti in enumerate(ts):
-            newTi = tomoObj.TiltImage()
-            newTi.copyInfo(ti, copyId=True)
-            newTi.setLocation(index + 1, tsOutName)
-
-            if ti.hasTransform():
-                newTi.setTransform(ti.getTransform())
-
-            newTi.setSamplingRate(self.samplingRate)
-
-            newTs.append(newTi)
-
-        ih = ImageHandler()
-        x, y, z, _ = ih.getDimensions(newTs.getFirstItem().getFileName())
-        newTs.setDim((x, y, z))
-        newTs.write(properties=False)
-
-        outputSetOfTiltSeries.update(newTs)
-        outputSetOfTiltSeries.updateDim()
-        outputSetOfTiltSeries.write()
-
-        self._store()
-
-    def closeStreamStep(self):
-        self.getOutputSetOfTiltSeries().setStreamState(Set.STREAM_CLOSED)
-
-        self._store()
-
-    # --------------------------- UTILS functions -------------------------------
-    def getOutputSetOfTiltSeries(self):
-        if hasattr(self, "outputSetOfTiltSeries"):
-            self.outputSetOfTiltSeries.enableAppend()
-        else:
-            outputSetOfTiltSeries = self._createSetOfTiltSeries()
-            outputSetOfTiltSeries.copyInfo(self.inputSetOfTiltSeries.get())
-            outputSetOfTiltSeries.setDim(self.inputSetOfTiltSeries.get().getDim())
-            outputSetOfTiltSeries.setSamplingRate(self.samplingRate)
-            outputSetOfTiltSeries.setStreamState(Set.STREAM_OPEN)
-            self._defineOutputs(outputSetOfTiltSeries=outputSetOfTiltSeries)
-            self._defineSourceRelation(self.inputSetOfTiltSeries, outputSetOfTiltSeries)
-        return self.outputSetOfTiltSeries
+        self._defineOutputs(**{OUTPUT_TS_NAME: outTsSet})
+        self._defineTransformRelation(self.inputSetOfTiltSeries, outTsSet)
 
     # --------------------------- INFO functions -----------------------------------
     def _citations(self):
+        return ['Grant2018']
 
-        cites = ['Grant2018']
+    # --------------------------- UTILS functions -------------------------------
+    def _updateTi(self, j, ts, ti, tsOut, tiOut):
+        fn = ti.getFileName()
+        tiOut.setFileName(self._getOutputFn(fn))
 
-        return cites
+    def _getOutputFn(self, tomoFile):
+        tomoBaseName = pwutils.removeBaseExt(tomoFile)
+        tomoExt = pwutils.getExt(tomoFile)
+        output = self._getExtraPath(tomoBaseName + '_resampled' + tomoExt)
 
-    def _validate(self):
-        errors = []
-        if self.newXsize <= 0:
-            errors.append('New X size must be greater than zero!')
-        if self.newYsize <= 0:
-            errors.append('New Y size must be greater than zero!')
-        return errors
+        return output
+
+    def _getOutputSampling(self):
+        ts = self.inputSetOfTiltSeries.get()
+        oldSamplingRate = ts.getSamplingRate()
+        oldXsize = ts.getFirstItem().getXDim()
+
+        return oldSamplingRate * oldXsize / self.newXsize.get()
