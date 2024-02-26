@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:     Ricardo D. Righetto (ricardo.righetto@unibas.ch)
+# *              Grigory Sharov (gsharov@mrc-lmb.cam.ac.uk)
 # *
 # * University of Basel
 # *
