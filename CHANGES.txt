@@ -1,3 +1,4 @@
+3.8: new protocols to resample tomo and TS
 3.7.1: fix an obsolete import in the viewer.
 3.7:
   Users:
