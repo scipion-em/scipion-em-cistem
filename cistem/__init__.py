@@ -83,4 +83,4 @@ class Plugin(pwem.Plugin):
                        tar='ctffind4-4.1.14.tgz',
                        default=True)
         env.addPackage('ctffind', version='5.0',
-                       tar='ctffind5-5.0.tgz')
+                       tar='ctffind-5.0.tgz')
