@@ -103,9 +103,9 @@ def rowToCtfModel(ctfRow, ctfModel):
     ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
 
 
-def parseCtffind4Output(filename):
+def parseCtffindOutput(filename):
     """ Retrieve defocus U, V and angle from the
-    output file of the ctffind4 execution.
+    output file of the ctffind execution.
     :param filename: input file to parse
     :return: an array with CTF values
     """
@@ -143,7 +143,7 @@ def readCtfModelStack(ctfModel, ctfArray, item=0):
         ctfFit, ctfResolution, ctfPhaseShift = -999, -999, 0
     else:
         (_, defocusU, defocusV, defocusAngle, ctfPhaseShift,
-         ctfFit, ctfResolution) = values
+         ctfFit, ctfResolution, *_) = values
         ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
     ctfModel.setFitQuality(ctfFit)
     ctfModel.setResolution(ctfResolution)
@@ -160,7 +160,7 @@ def readCtfModel(ctfModel, filename):
     :param ctfModel: output CTF model
     :param filename: file to parse
     """
-    result = parseCtffind4Output(filename)
+    result = parseCtffindOutput(filename)
     readCtfModelStack(ctfModel, result, item=0)
 
 
