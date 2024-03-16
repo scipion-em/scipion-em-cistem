@@ -41,7 +41,7 @@ from pwem import emlib
 from collections import namedtuple
 from tomo.protocols.protocol_ts_estimate_ctf import createCtfParams
 from .program_ctffind import ProgramCtffind
-from ..convert import readCtfModelStack, parseCtffind4Output
+from ..convert import readCtfModelStack, parseCtffindOutput
 from tomo.objects import CTFTomo, SetOfCTFTomoSeries, CTFTomoSeries
 
 MRCS_EXT = ".mrcs"
@@ -54,8 +54,8 @@ class TsCtffindOutputs(Enum):
 
 
 class CistemProtTsCtffind(EMProtocol):
-    """ CTF estimation on a set of tilt series using CTFFIND4. """
-    _label = 'tilt-series ctffind4'
+    """ CTF estimation on a set of tilt series using CTFFIND. """
+    _label = 'tilt-series ctffind'
     _devStatus = PROD
     _possibleOutputs = TsCtffindOutputs
 
@@ -161,7 +161,7 @@ class CistemProtTsCtffind(EMProtocol):
         outCtfSet.append(newCTFTomoSeries)
 
         # Generate the ti CTF and populate the corresponding CTF tomo series
-        ctfResult = parseCtffind4Output(outputLog)
+        ctfResult = parseCtffindOutput(outputLog)
         ctf = CTFModel()
         for i, tiltImage in enumerate(ts.iterItems()):
             ctfTomo = self._getCtfTi(ctf, ctfResult, i, mdObj.outputPsd)

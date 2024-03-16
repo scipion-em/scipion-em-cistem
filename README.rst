@@ -49,10 +49,12 @@ b) Developer's version
 
         scipion installp -p /path/to/scipion-em-cistem --devel
 
+**Important:** Starting from plugin v3.9, the config variables have been renamed. See: `scipion3 config -p cistem`
+
 cisTEM binaries will be installed automatically with the plugin, but you can also link an existing installation.
 
     * Default installation path assumed is ``software/em/cistem-1.0.0-beta``, if you want to change it, set *CISTEM_HOME* in ``scipion.conf`` file pointing to the folder where the cisTEM is installed.
-    * It's possible to use CTFFIND4 installed separately from cisTEM by defining *CTFFIND4_HOME* variable in ``scipion.conf``. Setting this value will have the priority over Ctffind inside cisTEM.
+    * It's possible to use CTFFIND installed separately from cisTEM by defining *CTFFIND_HOME* variable in ``scipion.conf``. Setting this value will have the priority over Ctffind inside cisTEM.
 
 A complete list of tests can be seen by executing ``scipion test --show --grep cistem``
 
@@ -61,13 +63,21 @@ Supported versions
 
 * 1.0.0-beta (cistem)
 * 4.1.13, 4.1.14 (ctffind4)
+* 5.0 (ctffind5)
+
+Licenses
+--------
+
+* cistem binaries are distributed under `The Janelia Research Campus Software License 1.2 license <http://license.janelia.org/license/janelia_license_1_2.html>`_
+* ctffind4 binaries are distributed under `The Janelia Research Campus Software License 1.1 license <https://www.janelia.org/node/47808>`_
+* ctffind5 binaries are distributed under `The Janelia Research Campus Software License 1.2 license <http://license.janelia.org/license/janelia_license_1_2.html>`_
 
 Protocols
 ---------
 
-* ctffind4
+* ctffind
 * import tomo CTFs
-* tilt-series ctffind4
+* tilt-series ctffind
 * unblur
 * find particles
 * classify 2D
@@ -75,4 +85,5 @@ Protocols
 References
 ----------
 
-1. Timothy Grant and Alexis Rohou and Nikolaus Grigorieff. (2018) cisTEM, user-friendly software for single-particle image processing. eLife 7:e35383.
+1. Johannes Elferich, Lingli Kong, Ximena Zottig, Nikolaus Grigorieff. (2024) CTFFIND5 provides improved insight into quality, tilt and thickness of TEM samples. bioRxiv 2024.02.26.582023; doi: https://doi.org/10.1101/2024.02.26.582023
+2. Timothy Grant and Alexis Rohou and Nikolaus Grigorieff. (2018) cisTEM, user-friendly software for single-particle image processing. eLife 7:e35383.

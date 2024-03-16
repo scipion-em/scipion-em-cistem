@@ -63,7 +63,7 @@ class TestBase(TestBaseCentralizedLayer):
         return tsImported
 
 
-class TestCtffind4Ts(TestBase):
+class TestCtffindTs(TestBase):
     def testCistemCtfFind(self):
         print(magentaStr("\n==> Testing cistem - ctffind:"))
         protCTF = CistemProtTsCtffind(inputTiltSeries=self.inputSoTS,
