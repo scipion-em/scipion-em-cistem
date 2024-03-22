@@ -140,6 +140,7 @@ eof\n
 
         self._defineOutputs(**{OUTPUT_TOMO_NAME: outTomoSet})
         self._defineTransformRelation(self.inTomograms, outTomoSet)
+        outTomoSet.updateDim()
 
     # --------------------------- INFO functions -----------------------------------
     def _citations(self):

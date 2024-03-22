@@ -134,6 +134,7 @@ eof\n
 
         self._defineOutputs(**{OUTPUT_TS_NAME: outTsSet})
         self._defineTransformRelation(self.inputSetOfTiltSeries, outTsSet)
+        outTsSet.updateDim()
 
     # --------------------------- INFO functions -----------------------------------
     def _citations(self):
