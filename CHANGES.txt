@@ -1,3 +1,5 @@
+3.8.1:
+ Developers: update the acquisition order in the CTFTomo objects (field added to that class in scipion-em-tomo v3.7.0).
 3.8: new protocols to resample tomo and TS
 3.7.1: fix an obsolete import in the viewer.
 3.7:
