@@ -40,12 +40,12 @@ from .program_ctffind import ProgramCtffind
 
 
 class CistemProtCTFFind(ProtCTFMicrographs):
-    """ Estimate CTF for a set of micrographs with ctffind4.
+    """ Estimate CTF for a set of micrographs with ctffind.
     
-    To find more information about ctffind4 visit:
+    To find more information about ctffind visit:
     https://grigoriefflab.umassmed.edu/ctffind4
     """
-    _label = 'ctffind4'
+    _label = 'ctffind'
     _devStatus = PROD
 
     def _defineParams(self, form):
@@ -161,7 +161,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         return errors
 
     def _citations(self):
-        return ["Mindell2003", "Rohou2015"]
+        return ["Mindell2003", "Rohou2015", "Elferich2024"]
 
     def _methods(self):
         methods = []

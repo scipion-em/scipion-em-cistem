@@ -32,14 +32,14 @@ import pyworkflow.utils as pwutils
 from pwem.objects import CTFModel, SetOfParticles
 
 from .convert import (readCtfModel, readSetOfParticles,
-                      readCtfModelStack, parseCtffind4Output)
+                      readCtfModelStack, parseCtffindOutput)
 
 with pwutils.weakImport('tomo'):
     from tomo.objects import CTFTomo
 
 
 class GrigorieffLabImportCTF:
-    """ Import CTF estimated with CTFFIND4. """
+    """ Import CTF estimated with CTFFIND. """
     def __init__(self, protocol):
         self.protocol = protocol
         self.copyOrLink = self.protocol.getCopyOrLink()
@@ -69,7 +69,7 @@ class GrigorieffLabImportCTF:
         tsId = ts.getTsId()
         fnBase = os.path.join(os.path.dirname(fileName), tsId)
         outputPsd = self._findPsdFile(fnBase)
-        ctfResult = parseCtffind4Output(fileName)
+        ctfResult = parseCtffindOutput(fileName)
         ctf = CTFModel()
         counter = 0
 

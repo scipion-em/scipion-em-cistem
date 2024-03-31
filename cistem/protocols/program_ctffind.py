@@ -32,19 +32,19 @@ from pwem.objects import CTFModel
 import pyworkflow.protocol.params as params
 
 from cistem import Plugin
-from ..constants import CTFFIND4_BIN
+from ..constants import CTFFIND_BIN
 from ..convert import readCtfModel
 
 
 class ProgramCtffind:
     """
-    Wrapper of Ctffind4 program that will handle parameters definition
+    Wrapper of Ctffind program that will handle parameters definition
     and also execution of the program with the proper arguments.
     This class is not a Protocol, but somewhat related, since it can be used from
     protocols that perform CTF estimation.
     """
     def __init__(self, protocol):
-        self._program = Plugin.getProgram(CTFFIND4_BIN)  # Load program to use
+        self._program = Plugin.getProgram(CTFFIND_BIN)  # Load program to use
         self._findPhaseShift = protocol.findPhaseShift.get()
         self._args, self._params = self._getArgs(protocol)  # Load general arguments
 
@@ -246,6 +246,8 @@ no
 %(slowSearch)s
 %(fixAstig)s
 %(phaseShift)s
+no
+no
 no
 eof\n
 """
