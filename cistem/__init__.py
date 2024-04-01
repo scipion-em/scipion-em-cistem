@@ -32,21 +32,21 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.8.1'
+__version__ = '3.9'
 _logo = "cistem_logo.png"
 _references = ['Grant2018']
 
 
 class Plugin(pwem.Plugin):
     _homeVar = CISTEM_HOME
-    _pathVars = [CISTEM_HOME]
+    _pathVars = [CISTEM_HOME, CTFFIND_HOME]
     _supportedVersions = [V1_0_0]
     _url = "https://github.com/scipion-em/scipion-em-cistem"
 
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(CISTEM_HOME, 'cistem-1.0.0-beta')
-        cls._defineEmVar(CTFFIND4_HOME, 'ctffind4-4.1.14')
+        cls._defineEmVar(CTFFIND_HOME, 'ctffind4-4.1.14')
 
     @classmethod
     def getEnviron(cls):
@@ -60,9 +60,9 @@ class Plugin(pwem.Plugin):
     @classmethod
     def getProgram(cls, program):
         """ Return the program binary that will be used. """
-        if program == CTFFIND4_BIN:
-            # if CTFFIND4_HOME is found, use it
-            path = cls.getVar(CTFFIND4_HOME)
+        if program == CTFFIND_BIN:
+            # if CTFFIND_HOME is found, use it
+            path = cls.getVar(CTFFIND_HOME)
             if os.path.exists(path):
                 binary = os.path.join(path, 'bin', program)
             else:
@@ -80,4 +80,7 @@ class Plugin(pwem.Plugin):
         env.addPackage('ctffind4', version='4.1.13',
                        tar='ctffind4-4.1.13.tgz')
         env.addPackage('ctffind4', version='4.1.14',
-                       tar='ctffind4-4.1.14.tgz')
+                       tar='ctffind4-4.1.14.tgz',
+                       default=True)
+        env.addPackage('ctffind', version='5.0',
+                       tar='ctffind-5.0.tgz')
