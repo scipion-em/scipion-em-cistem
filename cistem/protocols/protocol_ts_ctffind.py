@@ -166,6 +166,7 @@ class CistemProtTsCtffind(EMProtocol):
         for i, tiltImage in enumerate(ts.iterItems()):
             ctfTomo = self._getCtfTi(ctf, ctfResult, i, mdObj.outputPsd)
             ctfTomo.setIndex(tiltImage.getIndex())
+            ctfTomo.setAcquisitionOrder(tiltImage.getAcquisitionOrder())
             tiltImage.setCTF(ctfTomo)
             newCTFTomoSeries.append(ctfTomo)
 
