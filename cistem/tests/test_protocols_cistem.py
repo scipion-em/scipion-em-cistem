@@ -93,7 +93,7 @@ class TestBase(BaseTest):
         return cls.protCTF
 
 
-class TestCtffind4(TestBase):
+class TestCtffind(TestBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -101,7 +101,7 @@ class TestCtffind4(TestBase):
         print(magentaStr("\n==> Importing data - micrographs:"))
         cls.protImport = cls.runImportMicrographBPV(cls.micFn)
     
-    def testCtffind4V1(self):
+    def testCtffind(self):
         print(magentaStr("\n==> Testing cistem - ctffind:"))
         protCTF = CistemProtCTFFind()
         protCTF.inputMicrographs.set(self.protImport.outputMicrographs)

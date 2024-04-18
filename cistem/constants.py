@@ -31,9 +31,8 @@ CISTEM_HOME = 'CISTEM_HOME'
 V1_0_0 = '1.0.0-beta'
 
 # ------------------ Constants values -----------------------------------------
-
-CTFFIND4_HOME = 'CTFFIND4_HOME'
-CTFFIND4_BIN = 'ctffind'
+CTFFIND_HOME = 'CTFFIND_HOME'
+CTFFIND_BIN = 'ctffind'
 UNBLUR_BIN = 'unblur'
 FIND_PARTICLES_BIN = 'find_particles'
 
