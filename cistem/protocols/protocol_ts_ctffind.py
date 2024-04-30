@@ -54,7 +54,30 @@ class TsCtffindOutputs(Enum):
 
 
 class CistemProtTsCtffind(EMProtocol):
-    """ CTF estimation on a set of tilt series using CTFFIND. """
+    """ The contrast transfer function (CTF) affects the relative signal-to-noise
+    ratio (SNR) of Fourier components of each image. Those Fourier components
+    where the CTF is near 0.0 have very low SNR compared to others. It is therefore
+    essential to obtain accurate estimates of the CTF for each image so that
+    data from multiple imges may be combined in an optimal manner during later
+    processing.\n
+
+    You can use CTFfind (Rohou & Grigorieff, 2015) to estimate CTF parameter values
+    for each image. The main parameter to be determined for each image is the
+    objective lens defocus (in Angstroms). Because in general lenses are astigmatic,
+    one actually needs to determine two defocus values (describing defocus along
+    the lens' major and minor axes) and the angle of astigmatism.\n
+
+    To estimate the values of these three defocus parameters for an image,
+    CTFfind computes a filtered version of the amplitude spectrum of the micrograph
+    and then fits a model of the CTF (Equation 6 of Rohou & Grigorieff) to this
+    filtered amplitude spectrum. It then returns the values of the defocus parameters
+    which maximize the quality of the fit, as well as an image of the filtered
+    amplitude spectrum, with the CTF model.\n
+
+    Another diagnostic output is a 1D plot of the experimental amplitude spectrum,
+    the CTF fit and the quality of fitting.
+    """
+
     _label = 'tilt-series ctffind'
     _devStatus = PROD
     _possibleOutputs = TsCtffindOutputs
@@ -72,7 +95,7 @@ class CistemProtTsCtffind(EMProtocol):
         form.addSection(label='Input')
         form.addParam('inputTiltSeries', params.PointerParam, important=True,
                       pointerClass='SetOfTiltSeries, SetOfCTFTomoSeries',
-                      label='Input tilt series')
+                      label='Tilt series')
         form.addHidden('recalculate', params.BooleanParam,
                        default=False,
                        condition='recalculate',
