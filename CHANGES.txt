@@ -1,3 +1,7 @@
+3.9.1
+  Users:
+   - Adding a main help to the protocols and some helps modified.
+   - Phase shift parameter are now in a line
 3.9:
   Users:
    - add ctffind5, rename config vars
