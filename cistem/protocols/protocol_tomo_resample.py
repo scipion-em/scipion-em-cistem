@@ -40,7 +40,8 @@ OUTPUT_TOMO_NAME = 'resampledTomos'
 
 class CistemProtTomoResample(EMProtocol, ProtTomoBase):
     """
-    Resample tomograms by Fourier cropping/padding using cisTEM. This is equivalent to binning/unbinning operations but free of aliasing artifacts.
+    Resample tomograms by Fourier cropping/padding using cisTEM.
+    This is equivalent to binning/unbinning operations but free of aliasing artifacts.
 
     More info:
         https://cistem.org

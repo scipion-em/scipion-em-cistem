@@ -46,7 +46,8 @@ from tomo.objects import CTFTomo, SetOfCTFTomoSeries, CTFTomoSeries
 
 MRCS_EXT = ".mrcs"
 # create simple, lightweight data structures similar to a class, but without the overhead of defining a full class
-CistemTsCtfMd = namedtuple('CistemTsCtfMd', ['ts', 'tsFn', 'outputLog', 'outputPsd'])
+CistemTsCtfMd = namedtuple('CistemTsCtfMd',
+                           ['ts', 'tsFn', 'outputLog', 'outputPsd'])
 
 
 class TsCtffindOutputs(Enum):
@@ -54,7 +55,30 @@ class TsCtffindOutputs(Enum):
 
 
 class CistemProtTsCtffind(EMProtocol):
-    """ CTF estimation on a set of tilt series using CTFFIND. """
+    """ The contrast transfer function (CTF) affects the relative signal-to-noise
+    ratio (SNR) of Fourier components of each image. Those Fourier components
+    where the CTF is near 0.0 have very low SNR compared to others. It is therefore
+    essential to obtain accurate estimates of the CTF for each image so that
+    data from multiple imges may be combined in an optimal manner during later
+    processing.\n
+
+    You can use CTFfind (Rohou & Grigorieff, 2015) to estimate CTF parameter values
+    for each image. The main parameter to be determined for each image is the
+    objective lens defocus (in Angstroms). Because in general lenses are astigmatic,
+    one actually needs to determine two defocus values (describing defocus along
+    the lens' major and minor axes) and the angle of astigmatism.\n
+
+    To estimate the values of these three defocus parameters for an image,
+    CTFfind computes a filtered version of the amplitude spectrum of the micrograph
+    and then fits a model of the CTF (Equation 6 of Rohou & Grigorieff) to this
+    filtered amplitude spectrum. It then returns the values of the defocus parameters
+    which maximize the quality of the fit, as well as an image of the filtered
+    amplitude spectrum, with the CTF model.\n
+
+    Another diagnostic output is a 1D plot of the experimental amplitude spectrum,
+    the CTF fit and the quality of fitting.
+    """
+
     _label = 'tilt-series ctffind'
     _devStatus = PROD
     _possibleOutputs = TsCtffindOutputs
@@ -72,7 +96,7 @@ class CistemProtTsCtffind(EMProtocol):
         form.addSection(label='Input')
         form.addParam('inputTiltSeries', params.PointerParam, important=True,
                       pointerClass='SetOfTiltSeries, SetOfCTFTomoSeries',
-                      label='Input tilt series')
+                      label='Tilt series')
         form.addHidden('recalculate', params.BooleanParam,
                        default=False,
                        condition='recalculate',
@@ -94,15 +118,19 @@ class CistemProtTsCtffind(EMProtocol):
         self._initialize()
         pIdList = []
         for mdObj in self.tsCtfMdList:
-            pidConvert = self._insertFunctionStep(self.convertInputStep, mdObj, prerequisites=[])
-            pidProcess = self._insertFunctionStep(self.processTiltSeriesStep, mdObj, prerequisites=pidConvert)
-            pidCreateOutput = self._insertFunctionStep(self.createOutputStep, mdObj, prerequisites=pidProcess)
+            pidConvert = self._insertFunctionStep(self.convertInputStep,
+                                                  mdObj, prerequisites=[])
+            pidProcess = self._insertFunctionStep(self.processTiltSeriesStep,
+                                                  mdObj, prerequisites=pidConvert)
+            pidCreateOutput = self._insertFunctionStep(self.createOutputStep,
+                                                       mdObj, prerequisites=pidProcess)
             pIdList.append(pidCreateOutput)
         self._insertFunctionStep(self.closeStep, prerequisites=pIdList)
 
     def _initialize(self):
         self.inTsSet = self._getInputTs()
-        self._params = createCtfParams(self.inTsSet, self.windowSize.get(), self.lowRes.get(), self.highRes.get(),
+        self._params = createCtfParams(self.inTsSet, self.windowSize.get(),
+                                       self.lowRes.get(), self.highRes.get(),
                                        self.minDefocus.get(), self.maxDefocus.get())
         self._ctfProgram = ProgramCtffind(self)
         for ts in self.inTsSet.iterItems():
@@ -143,7 +171,8 @@ class CistemProtTsCtffind(EMProtocol):
         if outCtfSet:
             outCtfSet.enableAppend()
         else:
-            outCtfSet = SetOfCTFTomoSeries.create(self._getPath(), template='ctfTomoSeriess%s.sqlite')
+            outCtfSet = SetOfCTFTomoSeries.create(self._getPath(),
+                                                  template='ctfTomoSeriess%s.sqlite')
             outCtfSet.setSetOfTiltSeries(self.inTsSet)
             outCtfSet.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(**{self._possibleOutputs.CTFs.name: outCtfSet})
@@ -221,5 +250,3 @@ class CistemProtTsCtffind(EMProtocol):
         """ Return a copy of the global params dict,
         to avoid overwriting values. """
         return self._params
-
-
