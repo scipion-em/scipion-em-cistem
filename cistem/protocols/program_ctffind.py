@@ -111,9 +111,9 @@ class ProgramCtffind:
         line = group.addLine('Defocus search range (A)',
                              condition='not recalculate',
                              help='Select _minimum_ and _maximum_ values for '
-                                  'defocus search range (in A). Underfocus'
-                                  ' is represented by a positive number. This '
-                                  'range is critical for the proper estimation.'
+                                  'defocus search range (in A). Underfocus '
+                                  'is represented by a positive number. This '
+                                  'range is critical for the proper estimation. '
                                   'Note that these number should be around the '
                                   'nominal defocus of the acquisition.')
         line.addParam('minDefocus', params.FloatParam, default=5000.,
@@ -162,12 +162,11 @@ class ProgramCtffind:
                            'determined together with the defocus '
                            'parameters?')
         line = form.addLine('Phase shift (deg)',
-                             help="Select _minimum_ and _maximum_ values for "
-                                  " phase shift search range (in deg). These values "
-                                  "set the lower and upper bounds of the search for "
-                                  "the search. Also the search step should be provided."
-                                  "The phase shift will be estimated in step from the "
-                                  "minumum to the maximum pprovided values")
+                            help="Select _minimum_ and _maximum_ values for "
+                                 " phase shift search range (in deg). Also "
+                                 "the search step should be provided. "
+                                 "The phase shift will be estimated in step from the "
+                                 "minumum to the maximum pprovided values")
         line.addParam('minPhaseShift', params.FloatParam, default=0.,
                       label="Minimum",
                       condition='findPhaseShift')

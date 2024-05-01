@@ -46,7 +46,8 @@ from tomo.objects import CTFTomo, SetOfCTFTomoSeries, CTFTomoSeries
 
 MRCS_EXT = ".mrcs"
 # create simple, lightweight data structures similar to a class, but without the overhead of defining a full class
-CistemTsCtfMd = namedtuple('CistemTsCtfMd', ['ts', 'tsFn', 'outputLog', 'outputPsd'])
+CistemTsCtfMd = namedtuple('CistemTsCtfMd',
+                           ['ts', 'tsFn', 'outputLog', 'outputPsd'])
 
 
 class TsCtffindOutputs(Enum):
@@ -117,15 +118,19 @@ class CistemProtTsCtffind(EMProtocol):
         self._initialize()
         pIdList = []
         for mdObj in self.tsCtfMdList:
-            pidConvert = self._insertFunctionStep(self.convertInputStep, mdObj, prerequisites=[])
-            pidProcess = self._insertFunctionStep(self.processTiltSeriesStep, mdObj, prerequisites=pidConvert)
-            pidCreateOutput = self._insertFunctionStep(self.createOutputStep, mdObj, prerequisites=pidProcess)
+            pidConvert = self._insertFunctionStep(self.convertInputStep,
+                                                  mdObj, prerequisites=[])
+            pidProcess = self._insertFunctionStep(self.processTiltSeriesStep,
+                                                  mdObj, prerequisites=pidConvert)
+            pidCreateOutput = self._insertFunctionStep(self.createOutputStep,
+                                                       mdObj, prerequisites=pidProcess)
             pIdList.append(pidCreateOutput)
         self._insertFunctionStep(self.closeStep, prerequisites=pIdList)
 
     def _initialize(self):
         self.inTsSet = self._getInputTs()
-        self._params = createCtfParams(self.inTsSet, self.windowSize.get(), self.lowRes.get(), self.highRes.get(),
+        self._params = createCtfParams(self.inTsSet, self.windowSize.get(),
+                                       self.lowRes.get(), self.highRes.get(),
                                        self.minDefocus.get(), self.maxDefocus.get())
         self._ctfProgram = ProgramCtffind(self)
         for ts in self.inTsSet.iterItems():
@@ -166,7 +171,8 @@ class CistemProtTsCtffind(EMProtocol):
         if outCtfSet:
             outCtfSet.enableAppend()
         else:
-            outCtfSet = SetOfCTFTomoSeries.create(self._getPath(), template='ctfTomoSeriess%s.sqlite')
+            outCtfSet = SetOfCTFTomoSeries.create(self._getPath(),
+                                                  template='ctfTomoSeriess%s.sqlite')
             outCtfSet.setSetOfTiltSeries(self.inTsSet)
             outCtfSet.setStreamState(Set.STREAM_OPEN)
             self._defineOutputs(**{self._possibleOutputs.CTFs.name: outCtfSet})
@@ -244,5 +250,3 @@ class CistemProtTsCtffind(EMProtocol):
         """ Return a copy of the global params dict,
         to avoid overwriting values. """
         return self._params
-
-

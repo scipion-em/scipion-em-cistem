@@ -47,7 +47,7 @@ class CistemCTFWizard(CtfWizard):
         _objs = self._getParameters(protocol)['input']
         return CtfWizard._getListProvider(self, _objs)
         
-    def show(self, form):
+    def show(self, form, *args):
         protocol = form.protocol
         params = self._getParameters(protocol)
         _value = params['value']
