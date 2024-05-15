@@ -162,6 +162,7 @@ class ProgramCtffind:
                            'determined together with the defocus '
                            'parameters?')
         line = form.addLine('Phase shift (deg)',
+                            condition='findPhaseShift',
                             help="Select _minimum_ and _maximum_ values for "
                                  " phase shift search range (in deg). Also "
                                  "the search step should be provided. "
@@ -170,11 +171,11 @@ class ProgramCtffind:
         line.addParam('minPhaseShift', params.FloatParam, default=0.,
                       label="Minimum",
                       condition='findPhaseShift')
-        line.addParam('maxPhaseShift', params.FloatParam, default=180,
+        line.addParam('maxPhaseShift', params.FloatParam, default=180.,
                       label="Maximum",
                       condition='findPhaseShift')
-        line.addParam('stepPhaseShift', params.FloatParam, default=10,
-                      label="search in step",
+        line.addParam('stepPhaseShift', params.FloatParam, default=10.,
+                      label="Search step",
                       condition='findPhaseShift')
 
         form.addParallelSection(threads=3)
