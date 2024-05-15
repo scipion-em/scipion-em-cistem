@@ -111,8 +111,11 @@ class ProgramCtffind:
         line = group.addLine('Defocus search range (A)',
                              condition='not recalculate',
                              help='Select _minimum_ and _maximum_ values for '
-                                  'defocus search range (in A). Underfocus'
-                                  ' is represented by a positive number.')
+                                  'defocus search range (in A). Underfocus '
+                                  'is represented by a positive number. This '
+                                  'range is critical for the proper estimation. '
+                                  'Note that these number should be around the '
+                                  'nominal defocus of the acquisition.')
         line.addParam('minDefocus', params.FloatParam, default=5000.,
                       label='Min')
         line.addParam('maxDefocus', params.FloatParam, default=50000.,
@@ -158,24 +161,22 @@ class ProgramCtffind:
                            'with variable phase shift that must be '
                            'determined together with the defocus '
                            'parameters?')
-        form.addParam('minPhaseShift', params.FloatParam, default=0.,
-                      label="Minimum phase shift (deg)",
-                      condition='findPhaseShift',
-                      help='If finding an additional phase shift, '
-                           'this value sets the lower bound for the '
-                           'search.')
-        form.addParam('maxPhaseShift', params.FloatParam, default=180,
-                      label="Maximum phase shift (deg)",
-                      condition='findPhaseShift',
-                      help='If finding an additional phase shift, '
-                           'this value sets the upper bound for the '
-                           'search.')
-        form.addParam('stepPhaseShift', params.FloatParam, default=10,
-                      label="Phase shift search step (deg)",
-                      condition='findPhaseShift',
-                      help='If finding an additional phase shift, '
-                           'this value sets the step size for the '
-                           'search.')
+        line = form.addLine('Phase shift (deg)',
+                            condition='findPhaseShift',
+                            help="Select _minimum_ and _maximum_ values for "
+                                 " phase shift search range (in deg). Also "
+                                 "the search step should be provided. "
+                                 "The phase shift will be estimated in step from the "
+                                 "minumum to the maximum pprovided values")
+        line.addParam('minPhaseShift', params.FloatParam, default=0.,
+                      label="Min",
+                      condition='findPhaseShift')
+        line.addParam('maxPhaseShift', params.FloatParam, default=180.,
+                      label="Max",
+                      condition='findPhaseShift')
+        line.addParam('stepPhaseShift', params.FloatParam, default=10.,
+                      label="Step",
+                      condition='findPhaseShift')
 
         form.addParallelSection(threads=3)
 

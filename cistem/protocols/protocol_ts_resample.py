@@ -42,7 +42,8 @@ OUTPUT_TS_NAME = 'resampledTiltSeries'
 
 class CistemProtTsResample(EMProtocol, ProtTomoBase):
     """
-    Resample tilt series by Fourier cropping/padding using cisTEM. This is equivalent to binning/unbinning operations but free of aliasing artifacts.
+    Resample tilt series by Fourier cropping/padding using cisTEM.
+    This is equivalent to binning/unbinning operations but free of aliasing artifacts.
 
     More info:
         https://cistem.org
@@ -82,17 +83,17 @@ class CistemProtTsResample(EMProtocol, ProtTomoBase):
         form.addSection(label=pwutils.Message.LABEL_INPUT)
         form.addParam('inputSetOfTiltSeries', PointerParam,
                       pointerClass='SetOfTiltSeries',
-                      allowsNull=False,
-                      label='Input tilt series')
+                      important=True,
+                      label='Tilt series')
 
         form.addParam('newXsize', IntParam,
                       default=512, validators=[Positive],
-                      label='New X-Size',
-                      help='Volume will be rescaled to this size in X dimension (voxels)')
+                      label='New X-Size (px)',
+                      help='Images will be rescaled to this size in X dimension (pixels)')
         form.addParam('newYsize', IntParam,
                       default=512, validators=[Positive],
-                      label='New Y-Size',
-                      help='Volume will be rescaled to this size in Y dimension (voxels)')
+                      label='New Y-Size (px)',
+                      help='Images will be rescaled to this size in Y dimension (pixels)')
 
     # -------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
