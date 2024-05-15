@@ -169,13 +169,13 @@ class ProgramCtffind:
                                  "The phase shift will be estimated in step from the "
                                  "minumum to the maximum pprovided values")
         line.addParam('minPhaseShift', params.FloatParam, default=0.,
-                      label="Minimum",
+                      label="Min",
                       condition='findPhaseShift')
         line.addParam('maxPhaseShift', params.FloatParam, default=180.,
-                      label="Maximum",
+                      label="Max",
                       condition='findPhaseShift')
         line.addParam('stepPhaseShift', params.FloatParam, default=10.,
-                      label="Search step",
+                      label="Step",
                       condition='findPhaseShift')
 
         form.addParallelSection(threads=3)
