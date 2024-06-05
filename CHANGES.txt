@@ -1,3 +1,6 @@
+3.9.2
+  Developers:
+   - Fix tilt-series ctffind parallelization by locking the the whole createOutputStep to avoid concurrence problems.
 3.9.1
   Users:
    - Adding a main help to the protocols and some helps modified.

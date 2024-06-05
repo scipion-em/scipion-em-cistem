@@ -166,40 +166,43 @@ class CistemProtTsCtffind(EMProtocol):
             self.error(f"ERROR: Ctffind has failed for {mdObj.tsFn}: {e}")
 
     def createOutputStep(self, mdObj):
-        outCtfSet = self.getOutputCtfTomoSet()
+        with self._lock:
+            outCtfSet = self.getOutputCtfTomoSet()
 
-        if outCtfSet:
-            outCtfSet.enableAppend()
-        else:
-            outCtfSet = SetOfCTFTomoSeries.create(self._getPath(),
-                                                  template='ctfTomoSeriess%s.sqlite')
-            outCtfSet.setSetOfTiltSeries(self.inTsSet)
-            outCtfSet.setStreamState(Set.STREAM_OPEN)
-            self._defineOutputs(**{self._possibleOutputs.CTFs.name: outCtfSet})
-            self._defineSourceRelation(self.inTsSet, outCtfSet)
+            if outCtfSet:
+                outCtfSet.enableAppend()
+            else:
+                outCtfSet = SetOfCTFTomoSeries.create(self._getPath(),
+                                                      template='ctfTomoSeriess%s.sqlite')
+                outCtfSet.setSetOfTiltSeries(self.inTsSet)
+                outCtfSet.setStreamState(Set.STREAM_OPEN)
+                self._defineOutputs(**{self._possibleOutputs.CTFs.name: outCtfSet})
+                self._defineSourceRelation(self.inTsSet, outCtfSet)
 
-        ts = mdObj.ts
-        outputLog = mdObj.outputLog
+            ts = mdObj.ts
+            outputLog = mdObj.outputLog
 
-        # Generate the current CTF tomo series item
-        newCTFTomoSeries = CTFTomoSeries()
-        newCTFTomoSeries.copyInfo(ts)
-        newCTFTomoSeries.setTiltSeries(ts)
-        newCTFTomoSeries.setObjId(ts.getObjId())
-        newCTFTomoSeries.setTsId(ts.getTsId())
-        outCtfSet.append(newCTFTomoSeries)
+            # Generate the current CTF tomo series item
+            newCTFTomoSeries = CTFTomoSeries()
+            newCTFTomoSeries.copyInfo(ts)
+            newCTFTomoSeries.setTiltSeries(ts)
+            newCTFTomoSeries.setObjId(ts.getObjId())
+            newCTFTomoSeries.setTsId(ts.getTsId())
+            outCtfSet.append(newCTFTomoSeries)
 
-        # Generate the ti CTF and populate the corresponding CTF tomo series
-        ctfResult = parseCtffindOutput(outputLog)
-        ctf = CTFModel()
-        for i, tiltImage in enumerate(ts.iterItems()):
-            ctfTomo = self._getCtfTi(ctf, ctfResult, i, mdObj.outputPsd)
-            ctfTomo.setIndex(tiltImage.getIndex())
-            ctfTomo.setAcquisitionOrder(tiltImage.getAcquisitionOrder())
-            tiltImage.setCTF(ctfTomo)
-            newCTFTomoSeries.append(ctfTomo)
+            # Generate the ti CTF and populate the corresponding CTF tomo series
+            ctfResult = parseCtffindOutput(outputLog)
+            ctf = CTFModel()
+            for i, tiltImage in enumerate(ts.iterItems()):
+                ctfTomo = self._getCtfTi(ctf, ctfResult, i, mdObj.outputPsd)
+                ctfTomo.setIndex(tiltImage.getIndex())
+                ctfTomo.setAcquisitionOrder(tiltImage.getAcquisitionOrder())
+                tiltImage.setCTF(ctfTomo)
+                newCTFTomoSeries.append(ctfTomo)
 
-        outCtfSet.update(newCTFTomoSeries)
+            outCtfSet.update(newCTFTomoSeries)
+        # This should be indented once pyworkflow 3.6.1 is released. It will work the same way, but will be more
+        # efficient as less activate/release of the threads will be carried out
         self._store()
 
     def closeStep(self):
