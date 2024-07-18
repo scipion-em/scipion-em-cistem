@@ -47,6 +47,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     """
     _label = 'ctffind'
     _devStatus = PROD
+    recalculate = False # Legacy July 2024: to fake old recalculate param that is still used in the ProtCTFMicrographs (to be removed)
 
     def _defineParams(self, form):
         ProgramCtffind.defineInputParams(form)

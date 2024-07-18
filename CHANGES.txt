@@ -1,5 +1,8 @@
 3.9.2
   Developers:
+   - Resume hidden params in CTF estimations removed
+3.9.2
+  Developers:
    - Fix tilt-series ctffind parallelization by locking the the whole createOutputStep to avoid concurrence problems.
 3.9.1
   Users:
