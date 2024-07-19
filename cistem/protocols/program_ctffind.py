@@ -52,25 +52,17 @@ class ProgramCtffind:
     def defineInputParams(cls, form):
         """ Define input/common parameters. """
         form.addSection(label='Input')
-        form.addParam('recalculate', params.BooleanParam, default=False,
-                      condition='recalculate',
-                      label="Do recalculate ctf?")
-        form.addParam('continueRun', params.PointerParam, allowsNull=True,
-                      condition='recalculate', label="Input previous run",
-                      pointerClass='CistemProtCTFFind')
-        form.addHidden('sqliteFile', params.FileParam, condition='recalculate',
-                       allowsNull=True)
 
         form.addHidden('inputType', params.EnumParam, default=1,
                        label='Estimate using:',
                        choices=['Movies', 'Micrographs'],
                        display=params.EnumParam.DISPLAY_HLIST)
         form.addParam('inputMicrographs', params.PointerParam, important=True,
-                      condition='not recalculate and inputType==1',
+                      condition='inputType==1',
                       label='Input micrographs',
                       pointerClass='SetOfMicrographs')
         form.addParam('inputMovies', params.PointerParam, important=True,
-                      condition='not recalculate and inputType==0',
+                      condition='inputType==0',
                       label='Input movies',
                       pointerClass='SetOfMovies')
         form.addParam('avgFrames', params.IntParam, default=3,
@@ -81,7 +73,7 @@ class ProgramCtffind:
                            'in the sub-averages used to calculate '
                            'the amplitude spectra.')
         form.addParam('usePowerSpectra', params.BooleanParam, default=False,
-                      condition='not recalculate and inputType==1',
+                      condition='inputType==1',
                       label="Use power spectra?",
                       help="If set to Yes, the CTF estimation will be done "
                            "using power spectra calculated during "
@@ -91,7 +83,7 @@ class ProgramCtffind:
     def defineProcessParams(cls, form):
         """ Define specific parameters. """
         form.addParam('windowSize', params.IntParam, default=512,
-                      label='FFT box size (px)', condition='not recalculate',
+                      label='FFT box size (px)',
                       help='The dimensions (in pixels) of the amplitude '
                            'spectrum CTFfind will compute. Smaller box '
                            'sizes make the fitting process significantly '
@@ -101,7 +93,7 @@ class ProgramCtffind:
                            'increasing this parameter.')
 
         group = form.addGroup('Search limits')
-        line = group.addLine('Resolution (A)', condition='not recalculate',
+        line = group.addLine('Resolution (A)',
                              help='The CTF model will be fit to regions '
                                   'of the amplitude spectrum corresponding '
                                   'to this range of resolution.')
@@ -109,7 +101,6 @@ class ProgramCtffind:
         line.addParam('highRes', params.FloatParam, default=5., label='Max')
 
         line = group.addLine('Defocus search range (A)',
-                             condition='not recalculate',
                              help='Select _minimum_ and _maximum_ values for '
                                   'defocus search range (in A). Underfocus '
                                   'is represented by a positive number. This '

@@ -47,6 +47,8 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     """
     _label = 'ctffind'
     _devStatus = PROD
+    recalculate = False  # Legacy July 2024: to fake old recalculate param
+    # that is still used in the ProtCTFMicrographs (to be removed)
 
     def _defineParams(self, form):
         ProgramCtffind.defineInputParams(form)
@@ -114,10 +116,6 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     def _estimateCTF(self, mic, *args):
         """ Redefined func from the base class. """
         self._doCtfEstimation(mic)
-
-    def _reEstimateCTF(self, mic, ctf):
-        """ Redefined func from the base class. """
-        self._doCtfEstimation(mic, **self._getRecalCtfParamsDict(ctf))
 
     def _createCtfModel(self, mic, updateSampling=False):
         """ Redefined func from the base class. """
