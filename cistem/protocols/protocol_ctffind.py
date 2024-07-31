@@ -32,6 +32,7 @@ import os
 
 import pyworkflow.utils as pwutils
 from pyworkflow.constants import PROD
+from pyworkflow.object import Boolean
 from pwem.protocols import ProtCTFMicrographs
 from pwem.objects import CTFModel
 from pwem import emlib
@@ -47,7 +48,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     """
     _label = 'ctffind'
     _devStatus = PROD
-    recalculate = False  # Legacy July 2024: to fake old recalculate param
+    recalculate = Boolean(False, objDoStore=False)  # Legacy July 2024: to fake old recalculate param
     # that is still used in the ProtCTFMicrographs (to be removed)
 
     def _defineParams(self, form):
