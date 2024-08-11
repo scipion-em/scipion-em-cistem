@@ -188,7 +188,7 @@ class ProgramCtffind:
         :param psdFile: if defined, set PSD for the CTF model
         """
         ctf = CTFModel()
-        readCtfModel(ctf, filename)
+        ctf = readCtfModel(ctf, filename)
         if psdFile:
             ctf.setPsdFile(psdFile)
 

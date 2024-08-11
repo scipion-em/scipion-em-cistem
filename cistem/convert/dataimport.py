@@ -52,7 +52,7 @@ class GrigorieffLabImportCTF:
         """
         ctf = CTFModel()
         ctf.setMicrograph(mic)
-        readCtfModel(ctf, fileName)
+        ctf = readCtfModel(ctf, fileName)
         
         fnBase = pwutils.removeExt(fileName)
         psdFile = self._findPsdFile(fnBase)
@@ -87,13 +87,10 @@ class GrigorieffLabImportCTF:
             newCtfTomo.setAcquisitionOrder(ti.getAcquisitionOrder())
             output.append(newCtfTomo)
 
-        output.calculateDefocusUDeviation()
-        output.calculateDefocusVDeviation()
-
     @staticmethod
     def getCtfTi(ctf, ctfArray, tiIndex, psdStack=None):
         """ Parse the CTF object estimated for this Tilt-Image. """
-        readCtfModelStack(ctf, ctfArray, item=tiIndex)
+        ctf, tiltAxis, tiltAngle, thickness = readCtfModelStack(ctf, ctfArray, item=tiIndex)
         if psdStack is not None:
             ctf.setPsdFile(f"{tiIndex + 1}@" + psdStack)
 

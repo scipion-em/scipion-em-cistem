@@ -223,7 +223,7 @@ class CistemProtTsCtffind(EMProtocol):
     @staticmethod
     def _getCtfTi(ctf, ctfArray, tiIndex, psdStack):
         """ Parse the CTF object estimated for this Tilt-Image. """
-        readCtfModelStack(ctf, ctfArray, item=tiIndex)
+        ctf, tiltAxis, tiltAngle, thickness = readCtfModelStack(ctf, ctfArray, item=tiIndex)
         ctf.setPsdFile(f"{tiIndex + 1}@" + psdStack)
         ctfTomo = CTFTomo.ctfModelToCtfTomo(ctf)
         return ctfTomo

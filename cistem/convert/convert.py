@@ -137,14 +137,20 @@ def readCtfModelStack(ctfModel, ctfArray, item=0):
     else:
         values = ctfArray
 
+    tiltAxis, tiltAngle, thickness = None, None, None
+
     if ctfArray is None or np.isnan(values).any(axis=0) or values[1] < 0 or values[2] < 0:
         logger.debug(f"Invalid CTF values: {values}")
         setWrongDefocus(ctfModel)
         ctfFit, ctfResolution, ctfPhaseShift = -999, -999, 0
     else:
-        (_, defocusU, defocusV, defocusAngle, ctfPhaseShift,
-         ctfFit, ctfResolution, *_) = values
+        defocusU, defocusV, defocusAngle = values[1], values[2], values[3]
+        ctfPhaseShift, ctfFit, ctfResolution = values[4], values[5], values[6]
         ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
+
+        if len(values) == 10:
+            tiltAxis, tiltAngle, thickness = values[7], values[8], values[9]
+
     ctfModel.setFitQuality(ctfFit)
     ctfModel.setResolution(ctfResolution)
 
@@ -152,6 +158,8 @@ def readCtfModelStack(ctfModel, ctfArray, item=0):
     ctfPhaseShiftDeg = np.rad2deg(ctfPhaseShift)
     if ctfPhaseShiftDeg != 0:
         ctfModel.setPhaseShift(ctfPhaseShiftDeg)
+
+    return ctfModel, tiltAxis, tiltAngle, thickness
 
 
 def readCtfModel(ctfModel, filename):
@@ -161,7 +169,9 @@ def readCtfModel(ctfModel, filename):
     :param filename: file to parse
     """
     result = parseCtffindOutput(filename)
-    readCtfModelStack(ctfModel, result, item=0)
+    ctfModel, *_ = readCtfModelStack(ctfModel, result, item=0)
+
+    return ctfModel
 
 
 def readShiftsMovieAlignment(shiftFn):
