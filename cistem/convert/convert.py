@@ -31,7 +31,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from pwem.objects import (Coordinate, SetOfClasses2D, SetOfAverages,
-                          Transform, CTFModel)
+                          Transform, CTFModel, Float)
 from pwem.constants import ALIGN_PROJ
 from pwem.emlib.image import ImageHandler
 import pwem.convert.transformations as transformations
@@ -103,14 +103,26 @@ def rowToCtfModel(ctfRow, ctfModel):
     ctfModel.setStandardDefocus(defocusU, defocusV, defocusAngle)
 
 
-def parseCtffindOutput(filename):
+def parseCtffindOutput(filename, avrot=False):
     """ Retrieve defocus U, V and angle from the
     output file of the ctffind execution.
     :param filename: input file to parse
+    :param avrot: parse _avrot.txt file
     :return: an array with CTF values
     """
     if os.path.exists(filename):
-        return np.loadtxt(filename, dtype=float, comments='#')
+        result = np.loadtxt(filename, dtype=float, comments='#')
+        if avrot:
+            # Reshape into a 3D array where each "block" of 6 lines forms one slice along the first axis
+            reshaped_data = result.reshape(-1, 6, result.shape[1])
+            # Apply the mask to the first line of each 6-line block
+            mask = np.logical_and(reshaped_data[:, 0, :] >= 0.25, reshaped_data[:, 0, :] <= 0.28)
+            # Compute the sum of the absolute values of the second line where the mask is True
+            rotAvgArray = np.sum(np.abs(reshaped_data[:, 1, :]) * mask, axis=1)
+
+            return rotAvgArray
+        else:
+            return result
     else:
         logger.error(f"Warning: Missing file: {filename}")
 
@@ -126,10 +138,11 @@ def setWrongDefocus(ctfModel):
     ctfModel.setDefocusAngle(-999)
     
     
-def readCtfModelStack(ctfModel, ctfArray, item=0):
+def readCtfModelStack(ctfModel, ctfArray, rotAvgArray=None, item=0):
     """ Set values for the ctfModel from an input list.
     :param ctfModel: output CTF model
     :param ctfArray: array with CTF values
+    :param rotAvgArray: array with power spectrum values
     :param item: which row to use from ctfArray
     """
     if ctfArray is not None and ctfArray.ndim > 1:
@@ -159,17 +172,30 @@ def readCtfModelStack(ctfModel, ctfArray, item=0):
     if ctfPhaseShiftDeg != 0:
         ctfModel.setPhaseShift(ctfPhaseShiftDeg)
 
+    if rotAvgArray is not None:
+        if len(rotAvgArray) > 1:
+            ctfModel._rlnIceRingDensity = Float(rotAvgArray[item])
+        else:
+            ctfModel._rlnIceRingDensity = Float(rotAvgArray[0])
+
     return ctfModel, tiltAxis, tiltAngle, thickness
 
 
-def readCtfModel(ctfModel, filename):
+def readCtfModel(ctfModel, ctfFn, rotAvgFn=None):
     """ Shortcut function to read CTFs for non-stacks
     and set ctfModel values.
     :param ctfModel: output CTF model
-    :param filename: file to parse
+    :param ctfFn: input CTF file to parse
+    :param rotAvgFn: extra input file with power spectra
     """
-    result = parseCtffindOutput(filename)
-    ctfModel, *_ = readCtfModelStack(ctfModel, result, item=0)
+    result = parseCtffindOutput(ctfFn)
+
+    rotAvgArray = None
+    if rotAvgFn is not None:
+        rotAvgArray = parseCtffindOutput(rotAvgFn, avrot=True)
+
+    ctfModel, *_ = readCtfModelStack(ctfModel, ctfArray=result,
+                                     rotAvgArray=rotAvgArray, item=0)
 
     return ctfModel
 

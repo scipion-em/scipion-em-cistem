@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.9.3'
+__version__ = '3.10'
 _logo = "cistem_logo.png"
 _references = ['Grant2018']
 
@@ -46,7 +46,13 @@ class Plugin(pwem.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(CISTEM_HOME, 'cistem-1.0.0-beta')
-        cls._defineEmVar(CTFFIND_HOME, 'ctffind4-4.1.14')
+        cls._defineEmVar(CTFFIND_HOME, 'ctffind-5.0')
+
+    @classmethod
+    def getActiveVersion(cls, *args):
+        """ Return the env name that is currently active. """
+        ctffind = cls.getVar(CTFFIND_HOME)
+        return ctffind.split()[-1].split("-")[-1]
 
     @classmethod
     def getEnviron(cls):
