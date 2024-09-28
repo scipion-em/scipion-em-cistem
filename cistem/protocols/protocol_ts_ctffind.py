@@ -198,6 +198,9 @@ class CistemProtTsCtffind(EMProtocol):
         outCtfSet.write()
         self._store()
 
+    def allowsDelete(self, obj):
+        return True
+
     # --------------------------- INFO functions ------------------------------
     def _validate(self):
         errors = []
