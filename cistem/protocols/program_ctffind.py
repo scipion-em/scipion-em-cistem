@@ -134,7 +134,7 @@ class ProgramCtffind:
                             'fits. Disable this option if you expect '
                             'large astigmatism.')
         group.addParam('astigmatism', params.FloatParam,
-                       default=100.0, condition='fixAstig',
+                       default=200.0, condition='fixAstig',
                        label='Tolerated astigmatism (A)',
                        expertLevel=params.LEVEL_ADVANCED,
                        help='When restraining astigmatism, astigmatism values '
@@ -205,8 +205,6 @@ class ProgramCtffind:
         paramDict['fixAstig'] = "yes" if protocol.fixAstig else "no"
         paramDict['astigmatism'] = protocol.astigmatism.get()
         paramDict['lowRes'] = protocol.lowRes.get()
-        if paramDict['lowRes'] > 50:
-            paramDict['lowRes'] = 50
         paramDict['highRes'] = protocol.highRes.get()
         # defocus is in Angstroms now
         paramDict['minDefocus'] = protocol.minDefocus.get()

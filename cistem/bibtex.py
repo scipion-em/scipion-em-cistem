@@ -26,15 +26,15 @@
 # **************************************************************************
 """
 
-@article {Elferich2024,
-	author = {Johannes Elferich and Lingli Kong and Ximena Zottig and Nikolaus Grigorieff},
-	title = {CTFFIND5 provides improved insight into quality, tilt and thickness of TEM samples},
-	year = {2024},
-	doi = {10.1101/2024.02.26.582023},
-	publisher = {Cold Spring Harbor Laboratory},
-	URL = {https://www.biorxiv.org/content/early/2024/02/28/2024.02.26.582023},
-	journal = {bioRxiv}
+@article{Elferich2024,
+title={CTFFIND5 provides improved insight into quality, tilt and thickness of TEM samples},
+journal={eLife},
+url={http://dx.doi.org/10.7554/eLife.97227.1},
+DOI={https://dx.doi.org/10.7554/elife.97227.1},
+author={Elferich, Johannes and Kong, Lingli and Zottig, Ximena and Grigorieff, Nikolaus},
+year={2024}
 }
+
 
 @article{Grant2018,
 title = "cisTEM, user-friendly software for single-particle image processing",

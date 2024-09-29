@@ -112,12 +112,15 @@ class CistemProtTsCtffind(EMProtocol):
             form.addParam('measureTilt', params.BooleanParam,
                           default=False,
                           label="Determine sample tilt?",
-                          help="Measure tilt axis and angle.")
+                          help="Measure tilt axis and angle.\n"
+                               "NOTE: this will slow down computation x100 times!")
 
             group = form.addGroup('Thickness')
             group.addParam('measureThickness', params.BooleanParam,
                            default=False,
-                           label="Determine sample thickness?")
+                           label="Determine sample thickness?\n"
+                                 "NOTE: this can improve the results with a tiny "
+                                 "computing time penalty!")
             group.addParam('search1D', params.BooleanParam,
                            default=True, condition='measureThickness',
                            label="Use brute force 1D search?",
@@ -251,9 +254,6 @@ class CistemProtTsCtffind(EMProtocol):
     # --------------------------- INFO functions ------------------------------
     def _validate(self):
         errors = []
-
-        if self.lowRes.get() > 50:
-            errors.append("Minimum resolution cannot be > 50A.")
 
         valueStep = round(self.stepPhaseShift.get(), 2)
         valueMin = round(self.minPhaseShift.get(), 2)

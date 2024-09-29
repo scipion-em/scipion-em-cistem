@@ -51,10 +51,10 @@ b) Developer's version
 
 **Important:** Starting from plugin v3.9, the config variables have been renamed. See: `scipion3 config -p cistem`
 
-cisTEM binaries will be installed automatically with the plugin, but you can also link an existing installation.
+cisTEM and CTFFind binaries will be installed automatically with the plugin, but you can also link an existing installation.
 
-    * Default installation path assumed is ``software/em/cistem-1.0.0-beta``, if you want to change it, set *CISTEM_HOME* in ``scipion.conf`` file pointing to the folder where the cisTEM is installed.
-    * It's possible to use CTFFIND installed separately from cisTEM by defining *CTFFIND_HOME* variable in ``scipion.conf``. Setting this value will have the priority over Ctffind inside cisTEM.
+    * Default cisTEM installation path assumed is ``software/em/cistem-1.0.0-beta``, if you want to change it, set *CISTEM_HOME* in ``scipion.conf`` file pointing to the folder where the cisTEM is installed.
+    * Default CTFFind installation path assumed is ``software/em/ctffind-5.0.2``,if you want to change it, set *CTFFIND_HOME* in ``scipion.conf`` file pointing to the folder where CTFFind is installed.
 
 A complete list of tests can be seen by executing ``scipion test --show --grep cistem``
 
@@ -62,8 +62,8 @@ Supported versions
 ------------------
 
 * 1.0.0-beta (cistem)
-* 4.1.13, 4.1.14 (ctffind4)
-* 5.0 (ctffind5)
+* 4.1.14 (ctffind4)
+* 5.0, 5.0.2 (ctffind5)
 
 Licenses
 --------

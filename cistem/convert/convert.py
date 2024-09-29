@@ -116,10 +116,10 @@ def parseCtffindOutput(filename, avrot=False):
             # Reshape into a 3D array where each "block" of 6 lines forms one slice along the first axis
             reshaped_data = result.reshape(-1, 6, result.shape[1])
             # Apply the mask to the first line of each 6-line block
+            # See details at https://github.com/3dem/relion-devel/commit/fceb6f687a09151dd60fd6e0ca46289798223bab
             mask = np.logical_and(reshaped_data[:, 0, :] >= 0.25, reshaped_data[:, 0, :] <= 0.28)
             # Compute the sum of the absolute values of the second line where the mask is True
             rotAvgArray = np.sum(np.abs(reshaped_data[:, 1, :]) * mask, axis=1)
-
             return rotAvgArray
         else:
             return result

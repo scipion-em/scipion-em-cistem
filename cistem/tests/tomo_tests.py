@@ -68,10 +68,10 @@ with weakImport('tomo'):
         def testCistemCtfFind(self):
             print(magentaStr("\n==> Testing cistem - ctffind:"))
             protCTF = CistemProtTsCtffind(inputTiltSeries=self.inputSoTS,
-                                          lowRes=50,
-                                          highRes=4,
-                                          minDefocus=15000,
-                                          maxDefocus=50000,
+                                          lowRes=30,
+                                          highRes=3,
+                                          minDefocus=10000,
+                                          maxDefocus=20000,
                                           numberOfThreads=3)  # 1 per each TS plus the main one
             self.launchProtocol(protCTF, wait=True)
             outCtfs = getattr(protCTF, protCTF._possibleOutputs.CTFs.name, None)
