@@ -175,20 +175,6 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         return methods
 
     # -------------------------- UTILS functions ------------------------------
-    def _getRecalCtfParamsDict(self, ctfModel):
-        """ Update values from user-adjusted params from the Java GUI.
-        :param ctfModel: input CTF model object
-        """
-        values = [float(x) for x in ctfModel.getObjComment().split()]
-        sampling = self.inputMicrographs.get().getSamplingRate()
-        return {
-            'step_focus': 500.0,
-            'lowRes': sampling / values[3],
-            'highRes': sampling / values[4],
-            'minDefocus': min([values[0], values[1]]),
-            'maxDefocus': max([values[0], values[1]])
-        }
-
     def _getMicExtra(self, mic, suffix):
         """ Return a file in extra direction with root of micFn.
         :param mic: input mic object

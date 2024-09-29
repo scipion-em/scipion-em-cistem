@@ -245,6 +245,9 @@ class CistemProtTsCtffind(EMProtocol):
     def closeStep(self):
         self._closeOutputSet()
 
+    def allowsDelete(self, obj):
+        return True
+
     # --------------------------- INFO functions ------------------------------
     def _validate(self):
         errors = []
