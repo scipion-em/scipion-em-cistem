@@ -1,3 +1,8 @@
+3.10:
+    - add tomo options to measure sample tilt and thickness
+    - estimate ice thickness as in Relion, output rlnIceThickness column
+    - add new binary ctffind 5.0.2
+    - 5.0.2 no longer limits lowest resolution to 50A
 3.9.3
   Developers:
    - Resume params in CTF estimations removed

@@ -122,6 +122,7 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         """ Redefined func from the base class. """
         psd = self._getPsdPath(mic)
         ctfModel = self._ctfProgram.parseOutputAsCtf(self._getCtfOutPath(mic),
+                                                     self._getCtfAvrotPath(mic),
                                                      psdFile=psd)
         ctfModel.setMicrograph(mic)
         pwutils.cleanPath(self._getCtfOutPath(mic))
@@ -144,9 +145,6 @@ class CistemProtCTFFind(ProtCTFMicrographs):
                 errors.append("Input micrographs do not have associated power spectra.")
             else:
                 self.psSampling = mic._powerSpectra.getSamplingRate()
-
-        if self.lowRes.get() > 50:
-            errors.append("Minimum resolution cannot be > 50A.")
 
         valueStep = round(self.stepPhaseShift.get(), 2)
         valueMin = round(self.minPhaseShift.get(), 2)
@@ -187,6 +185,9 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     def _getCtfOutPath(self, mic):
         return self._getMicExtra(mic, 'ctf.txt')
+
+    def _getCtfAvrotPath(self, mic):
+        return self._getMicExtra(mic, 'ctf_avrot.txt')
 
     def _getCTFModel(self, defocusU, defocusV, defocusAngle, psdFile):
         ctf = CTFModel()

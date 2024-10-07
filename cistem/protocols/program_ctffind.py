@@ -134,7 +134,7 @@ class ProgramCtffind:
                             'fits. Disable this option if you expect '
                             'large astigmatism.')
         group.addParam('astigmatism', params.FloatParam,
-                       default=100.0, condition='fixAstig',
+                       default=200.0, condition='fixAstig',
                        label='Tolerated astigmatism (A)',
                        expertLevel=params.LEVEL_ADVANCED,
                        help='When restraining astigmatism, astigmatism values '
@@ -181,14 +181,15 @@ class ProgramCtffind:
         paramDict.update(kwargs)
         return self._program, self._args % paramDict
 
-    def parseOutputAsCtf(self, filename, psdFile=None):
+    def parseOutputAsCtf(self, ctfFn, rotAvgFn=None, psdFile=None):
         """ Parse the output file and build the CTFModel object
         with the values.
-        :param filename: input file to parse
+        :param ctfFn: input CTF file to parse
+        :param rotAvgFn: extra input file with power spectra
         :param psdFile: if defined, set PSD for the CTF model
         """
         ctf = CTFModel()
-        readCtfModel(ctf, filename)
+        ctf = readCtfModel(ctf, ctfFn, rotAvgFn)
         if psdFile:
             ctf.setPsdFile(psdFile)
 
@@ -204,8 +205,6 @@ class ProgramCtffind:
         paramDict['fixAstig'] = "yes" if protocol.fixAstig else "no"
         paramDict['astigmatism'] = protocol.astigmatism.get()
         paramDict['lowRes'] = protocol.lowRes.get()
-        if paramDict['lowRes'] > 50:
-            paramDict['lowRes'] = 50
         paramDict['highRes'] = protocol.highRes.get()
         # defocus is in Angstroms now
         paramDict['minDefocus'] = protocol.minDefocus.get()
@@ -220,6 +219,19 @@ class ProgramCtffind:
             paramDict['phaseShift'] = "no"
 
         paramDict['slowSearch'] = "yes" if protocol.slowSearch else "no"
+
+        tomo = hasattr(protocol, "measureTilt")
+        paramDict['measureTilt'] = "yes" if (tomo and protocol.measureTilt) else "no"
+        if tomo and protocol.measureThickness:
+            paramDict['measureThickness'] = "yes"
+            paramDict['search1D'] = "yes" if protocol.search1D else "no"
+            paramDict['refine2D'] = "yes" if protocol.refine2D else "no"
+            paramDict['lowResNodes'] = protocol.lowResNodes.get()
+            paramDict['highResNodes'] = protocol.highResNodes.get()
+            paramDict['useRoundedSquare'] = "yes" if protocol.useRoundedSquare else "no"
+            paramDict['downweightNodes'] = "yes" if protocol.downweightNodes else "no"
+        else:
+            paramDict['measureThickness'] = "no"
 
         args = """   << eof > %(ctffindOut)s
 %(micFn)s
@@ -238,8 +250,8 @@ no
 %(slowSearch)s
 %(fixAstig)s
 %(phaseShift)s
-no
-no
+%(measureTilt)s
+%(measureThickness)s
 no
 eof\n
 """
@@ -266,4 +278,15 @@ eof\n
                                 '%(minPhaseShift)f\n'
                                 '%(maxPhaseShift)f\n'
                                 '%(stepPhaseShift)f')
+
+        if tomo and protocol.measureThickness:
+            args = args.replace('%(measureThickness)s',
+                                '%(measureThickness)s\n'
+                                '%(search1D)s\n'
+                                '%(refine2D)s\n'
+                                '%(lowResNodes)s\n'
+                                '%(highResNodes)s\n'
+                                '%(useRoundedSquare)s\n'
+                                '%(downweightNodes)s')
+
         return args, paramDict
