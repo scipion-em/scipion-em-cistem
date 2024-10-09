@@ -82,10 +82,10 @@ class CistemProtTsCtffind(EMProtocol):
     _label = 'tilt-series ctffind'
     _devStatus = PROD
     _possibleOutputs = TsCtffindOutputs
+    stepsExecutionMode = STEPS_PARALLEL
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.stepsExecutionMode = STEPS_PARALLEL
         self.usePowerSpectra = False
         self.useStacks = True
         self.tsCtfMdList = []
