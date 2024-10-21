@@ -1,11 +1,11 @@
-3.10.1:
-    Developers:
-    - Fix an indirect pointer, streaming was not working
 3.10:
+    Users:
     - add tomo options to measure sample tilt and thickness
     - estimate ice thickness as in Relion, output rlnIceThickness column
     - add new binary ctffind 5.0.2
     - 5.0.2 no longer limits lowest resolution to 50A
+    Developers:
+    - Fix an indirect pointer, streaming was not working
 3.9.3
   Developers:
    - Resume params in CTF estimations removed
