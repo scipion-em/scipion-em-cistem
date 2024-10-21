@@ -216,7 +216,7 @@ class CistemProtTsCtffind(EMProtocol):
             else:
                 outCtfSet = SetOfCTFTomoSeries.create(self._getPath(),
                                                       template='ctfTomoSeries%s.sqlite')
-                outCtfSet.setSetOfTiltSeries(self.inTsSet)
+                outCtfSet.setSetOfTiltSeries(self._getInputTs(pointer=True))
                 outCtfSet.setStreamState(Set.STREAM_OPEN)
                 self._defineOutputs(**{self._possibleOutputs.CTFs.name: outCtfSet})
                 self._defineSourceRelation(self.inTsSet, outCtfSet)
