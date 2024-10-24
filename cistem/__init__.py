@@ -25,6 +25,7 @@
 # **************************************************************************
 
 import os
+import re
 
 import pwem
 import pyworkflow.utils as pwutils
@@ -32,7 +33,7 @@ import pyworkflow.utils as pwutils
 from .constants import *
 
 
-__version__ = '3.9.2'
+__version__ = '3.10'
 _logo = "cistem_logo.png"
 _references = ['Grant2018']
 
@@ -46,7 +47,13 @@ class Plugin(pwem.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(CISTEM_HOME, 'cistem-1.0.0-beta')
-        cls._defineEmVar(CTFFIND_HOME, 'ctffind4-4.1.14')
+        cls._defineEmVar(CTFFIND_HOME, 'ctffind-5.0.2')
+
+    @classmethod
+    def getActiveVersion(cls, *args):
+        """ Return the env name that is currently active. """
+        ctffind = cls.getVar(CTFFIND_HOME)
+        return re.search(r"ctffind-([0-9a-zA-Z.]+)$", ctffind).group(1)
 
     @classmethod
     def getEnviron(cls):
@@ -77,10 +84,10 @@ class Plugin(pwem.Plugin):
         env.addPackage('cistem', version='1.0.0-beta',
                        url="https://grigoriefflab.umassmed.edu/sites/default/files/cistem-1.0.0-beta-intel-linux.tar.gz",
                        default=True)
-        env.addPackage('ctffind4', version='4.1.13',
-                       tar='ctffind4-4.1.13.tgz')
         env.addPackage('ctffind4', version='4.1.14',
-                       tar='ctffind4-4.1.14.tgz',
-                       default=True)
+                       tar='ctffind4-4.1.14.tgz')
         env.addPackage('ctffind', version='5.0',
                        tar='ctffind-5.0.tgz')
+        env.addPackage('ctffind', version='5.0.2',
+                       tar='ctffind-5.0.2.tgz',
+                       default=True)

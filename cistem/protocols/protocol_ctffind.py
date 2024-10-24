@@ -32,6 +32,7 @@ import os
 
 import pyworkflow.utils as pwutils
 from pyworkflow.constants import PROD
+from pyworkflow.object import Boolean
 from pwem.protocols import ProtCTFMicrographs
 from pwem.objects import CTFModel
 from pwem import emlib
@@ -47,6 +48,8 @@ class CistemProtCTFFind(ProtCTFMicrographs):
     """
     _label = 'ctffind'
     _devStatus = PROD
+    recalculate = Boolean(False, objDoStore=False)  # Legacy July 2024: to fake old recalculate param
+    # that is still used in the ProtCTFMicrographs (to be removed)
 
     def _defineParams(self, form):
         ProgramCtffind.defineInputParams(form)
@@ -115,14 +118,11 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         """ Redefined func from the base class. """
         self._doCtfEstimation(mic)
 
-    def _reEstimateCTF(self, mic, ctf):
-        """ Redefined func from the base class. """
-        self._doCtfEstimation(mic, **self._getRecalCtfParamsDict(ctf))
-
     def _createCtfModel(self, mic, updateSampling=False):
         """ Redefined func from the base class. """
         psd = self._getPsdPath(mic)
         ctfModel = self._ctfProgram.parseOutputAsCtf(self._getCtfOutPath(mic),
+                                                     self._getCtfAvrotPath(mic),
                                                      psdFile=psd)
         ctfModel.setMicrograph(mic)
         pwutils.cleanPath(self._getCtfOutPath(mic))
@@ -145,9 +145,6 @@ class CistemProtCTFFind(ProtCTFMicrographs):
                 errors.append("Input micrographs do not have associated power spectra.")
             else:
                 self.psSampling = mic._powerSpectra.getSamplingRate()
-
-        if self.lowRes.get() > 50:
-            errors.append("Minimum resolution cannot be > 50A.")
 
         valueStep = round(self.stepPhaseShift.get(), 2)
         valueMin = round(self.minPhaseShift.get(), 2)
@@ -175,20 +172,6 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         return methods
 
     # -------------------------- UTILS functions ------------------------------
-    def _getRecalCtfParamsDict(self, ctfModel):
-        """ Update values from user-adjusted params from the Java GUI.
-        :param ctfModel: input CTF model object
-        """
-        values = [float(x) for x in ctfModel.getObjComment().split()]
-        sampling = self.inputMicrographs.get().getSamplingRate()
-        return {
-            'step_focus': 500.0,
-            'lowRes': sampling / values[3],
-            'highRes': sampling / values[4],
-            'minDefocus': min([values[0], values[1]]),
-            'maxDefocus': max([values[0], values[1]])
-        }
-
     def _getMicExtra(self, mic, suffix):
         """ Return a file in extra direction with root of micFn.
         :param mic: input mic object
@@ -202,6 +185,9 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
     def _getCtfOutPath(self, mic):
         return self._getMicExtra(mic, 'ctf.txt')
+
+    def _getCtfAvrotPath(self, mic):
+        return self._getMicExtra(mic, 'ctf_avrot.txt')
 
     def _getCTFModel(self, defocusU, defocusV, defocusAngle, psdFile):
         ctf = CTFModel()

@@ -52,25 +52,17 @@ class ProgramCtffind:
     def defineInputParams(cls, form):
         """ Define input/common parameters. """
         form.addSection(label='Input')
-        form.addParam('recalculate', params.BooleanParam, default=False,
-                      condition='recalculate',
-                      label="Do recalculate ctf?")
-        form.addParam('continueRun', params.PointerParam, allowsNull=True,
-                      condition='recalculate', label="Input previous run",
-                      pointerClass='CistemProtCTFFind')
-        form.addHidden('sqliteFile', params.FileParam, condition='recalculate',
-                       allowsNull=True)
 
         form.addHidden('inputType', params.EnumParam, default=1,
                        label='Estimate using:',
                        choices=['Movies', 'Micrographs'],
                        display=params.EnumParam.DISPLAY_HLIST)
         form.addParam('inputMicrographs', params.PointerParam, important=True,
-                      condition='not recalculate and inputType==1',
+                      condition='inputType==1',
                       label='Input micrographs',
                       pointerClass='SetOfMicrographs')
         form.addParam('inputMovies', params.PointerParam, important=True,
-                      condition='not recalculate and inputType==0',
+                      condition='inputType==0',
                       label='Input movies',
                       pointerClass='SetOfMovies')
         form.addParam('avgFrames', params.IntParam, default=3,
@@ -81,7 +73,7 @@ class ProgramCtffind:
                            'in the sub-averages used to calculate '
                            'the amplitude spectra.')
         form.addParam('usePowerSpectra', params.BooleanParam, default=False,
-                      condition='not recalculate and inputType==1',
+                      condition='inputType==1',
                       label="Use power spectra?",
                       help="If set to Yes, the CTF estimation will be done "
                            "using power spectra calculated during "
@@ -91,7 +83,7 @@ class ProgramCtffind:
     def defineProcessParams(cls, form):
         """ Define specific parameters. """
         form.addParam('windowSize', params.IntParam, default=512,
-                      label='FFT box size (px)', condition='not recalculate',
+                      label='FFT box size (px)',
                       help='The dimensions (in pixels) of the amplitude '
                            'spectrum CTFfind will compute. Smaller box '
                            'sizes make the fitting process significantly '
@@ -101,7 +93,7 @@ class ProgramCtffind:
                            'increasing this parameter.')
 
         group = form.addGroup('Search limits')
-        line = group.addLine('Resolution (A)', condition='not recalculate',
+        line = group.addLine('Resolution (A)',
                              help='The CTF model will be fit to regions '
                                   'of the amplitude spectrum corresponding '
                                   'to this range of resolution.')
@@ -109,7 +101,6 @@ class ProgramCtffind:
         line.addParam('highRes', params.FloatParam, default=5., label='Max')
 
         line = group.addLine('Defocus search range (A)',
-                             condition='not recalculate',
                              help='Select _minimum_ and _maximum_ values for '
                                   'defocus search range (in A). Underfocus '
                                   'is represented by a positive number. This '
@@ -143,7 +134,7 @@ class ProgramCtffind:
                             'fits. Disable this option if you expect '
                             'large astigmatism.')
         group.addParam('astigmatism', params.FloatParam,
-                       default=100.0, condition='fixAstig',
+                       default=200.0, condition='fixAstig',
                        label='Tolerated astigmatism (A)',
                        expertLevel=params.LEVEL_ADVANCED,
                        help='When restraining astigmatism, astigmatism values '
@@ -190,14 +181,15 @@ class ProgramCtffind:
         paramDict.update(kwargs)
         return self._program, self._args % paramDict
 
-    def parseOutputAsCtf(self, filename, psdFile=None):
+    def parseOutputAsCtf(self, ctfFn, rotAvgFn=None, psdFile=None):
         """ Parse the output file and build the CTFModel object
         with the values.
-        :param filename: input file to parse
+        :param ctfFn: input CTF file to parse
+        :param rotAvgFn: extra input file with power spectra
         :param psdFile: if defined, set PSD for the CTF model
         """
         ctf = CTFModel()
-        readCtfModel(ctf, filename)
+        ctf = readCtfModel(ctf, ctfFn, rotAvgFn)
         if psdFile:
             ctf.setPsdFile(psdFile)
 
@@ -213,8 +205,6 @@ class ProgramCtffind:
         paramDict['fixAstig'] = "yes" if protocol.fixAstig else "no"
         paramDict['astigmatism'] = protocol.astigmatism.get()
         paramDict['lowRes'] = protocol.lowRes.get()
-        if paramDict['lowRes'] > 50:
-            paramDict['lowRes'] = 50
         paramDict['highRes'] = protocol.highRes.get()
         # defocus is in Angstroms now
         paramDict['minDefocus'] = protocol.minDefocus.get()
@@ -229,6 +219,19 @@ class ProgramCtffind:
             paramDict['phaseShift'] = "no"
 
         paramDict['slowSearch'] = "yes" if protocol.slowSearch else "no"
+
+        tomo = hasattr(protocol, "measureTilt")
+        paramDict['measureTilt'] = "yes" if (tomo and protocol.measureTilt) else "no"
+        if tomo and protocol.measureThickness:
+            paramDict['measureThickness'] = "yes"
+            paramDict['search1D'] = "yes" if protocol.search1D else "no"
+            paramDict['refine2D'] = "yes" if protocol.refine2D else "no"
+            paramDict['lowResNodes'] = protocol.lowResNodes.get()
+            paramDict['highResNodes'] = protocol.highResNodes.get()
+            paramDict['useRoundedSquare'] = "yes" if protocol.useRoundedSquare else "no"
+            paramDict['downweightNodes'] = "yes" if protocol.downweightNodes else "no"
+        else:
+            paramDict['measureThickness'] = "no"
 
         args = """   << eof > %(ctffindOut)s
 %(micFn)s
@@ -247,8 +250,8 @@ no
 %(slowSearch)s
 %(fixAstig)s
 %(phaseShift)s
-no
-no
+%(measureTilt)s
+%(measureThickness)s
 no
 eof\n
 """
@@ -275,4 +278,15 @@ eof\n
                                 '%(minPhaseShift)f\n'
                                 '%(maxPhaseShift)f\n'
                                 '%(stepPhaseShift)f')
+
+        if tomo and protocol.measureThickness:
+            args = args.replace('%(measureThickness)s',
+                                '%(measureThickness)s\n'
+                                '%(search1D)s\n'
+                                '%(refine2D)s\n'
+                                '%(lowResNodes)s\n'
+                                '%(highResNodes)s\n'
+                                '%(useRoundedSquare)s\n'
+                                '%(downweightNodes)s')
+
         return args, paramDict
