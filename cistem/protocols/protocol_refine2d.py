@@ -61,10 +61,7 @@ class CistemProtRefine2D(ProtClassify2D):
     _label = 'classify 2D'
     _devStatus = PROD
     _possibleOutputs = outputs
-
-    def __init__(self, **args):
-        ProtClassify2D.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_SERIAL
+    stepsExecutionMode = STEPS_SERIAL
 
     def _createFilenameTemplates(self):
         """ Centralize the names of the files. """

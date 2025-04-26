@@ -44,10 +44,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
     """ Protocol to pick particles (ab-initio or reference-based) using cisTEM. """
     _label = 'find particles'
     _devStatus = PROD
-
-    def __init__(self, **kwargs):
-        ProtParticlePickingAuto.__init__(self, **kwargs)
-        self.stepsExecutionMode = STEPS_PARALLEL
+    stepsExecutionMode = STEPS_PARALLEL
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):

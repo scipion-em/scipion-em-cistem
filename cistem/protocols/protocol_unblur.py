@@ -52,10 +52,7 @@ class CistemProtUnblur(ProtAlignMovies):
     _label = 'unblur'
     _devStatus = PROD
     CONVERT_TO_MRC = 'mrc'
-
-    def __init__(self, **args):
-        ProtAlignMovies.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
+    stepsExecutionMode = STEPS_PARALLEL
 
     def _getConvertExtension(self, filename):
         """ Check whether it is needed to convert to .mrc or not """
