@@ -261,7 +261,7 @@ class CistemProtRefine2D(ProtClassify2D):
         self._createIterTemplates()
         self._insertContinueStep()
         self._insertItersSteps()
-        self._insertFunctionStep("createOutputStep")
+        self._insertFunctionStep("createOutputStep", needsGPU=False)
 
     def _insertContinueStep(self):
         if self.doContinue:
@@ -273,7 +273,7 @@ class CistemProtRefine2D(ProtClassify2D):
                 self.initIter = continueRun._lastIter() + 1
             else:
                 self.initIter = int(self.continueIter.get()) + 1
-            self._insertFunctionStep('continueStep', self.initIter)
+            self._insertFunctionStep('continueStep', self.initIter, needsGPU=False)
         else:
             self.initIter = 1
 
@@ -281,28 +281,29 @@ class CistemProtRefine2D(ProtClassify2D):
 
     def _insertItersSteps(self):
         """ Insert the steps for all iterations. """
-        self._insertFunctionStep('convertInputStep')
+        self._insertFunctionStep('convertInputStep', needsGPU=False)
         self.currPtcl = 1
         for iterN in self._allItersN():
             paramsDic = self._getParamsIteration(iterN)
             depsRefine = self._insertRefineIterStep(iterN, paramsDic)
             if iterN > 1:
                 self._insertFunctionStep("mergeStep", iterN,
-                                         prerequisites=depsRefine)
+                                         prerequisites=depsRefine, needsGPU=False)
 
     def _insertRefineIterStep(self, iterN, paramsDic):
         """ Execute the refinement for the current iteration """
         depsRefine = []
         if iterN == 1:
-            initParStepId = self._insertFunctionStep("writeInitParStep")
+            initParStepId = self._insertFunctionStep("writeInitParStep", needsGPU=False)
             refineId = self._insertFunctionStep("makeInitClassesStep",
                                                 paramsDic,
-                                                prerequisites=[initParStepId])
+                                                prerequisites=[initParStepId],
+                                                needsGPU=False)
             depsRefine.append(refineId)
         else:
             refineId = self._insertFunctionStep("refineParallelStep",
                                                 iterN,
-                                                paramsDic)
+                                                paramsDic, needsGPU=False)
             depsRefine.append(refineId)
         return depsRefine
 

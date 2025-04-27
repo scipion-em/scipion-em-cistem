@@ -160,13 +160,16 @@ class CistemProtTsCtffind(EMProtocol):
         pIdList = []
         for mdObj in self.tsCtfMdList:
             pidConvert = self._insertFunctionStep(self.convertInputStep,
-                                                  mdObj, prerequisites=[])
+                                                  mdObj, prerequisites=[],
+                                                  needsGPU=False)
             pidProcess = self._insertFunctionStep(self.processTiltSeriesStep,
-                                                  mdObj, prerequisites=pidConvert)
+                                                  mdObj, prerequisites=pidConvert,
+                                                  needsGPU=False)
             pidCreateOutput = self._insertFunctionStep(self.createOutputStep,
-                                                       mdObj, prerequisites=pidProcess)
+                                                       mdObj, prerequisites=pidProcess,
+                                                       needsGPU=False)
             pIdList.append(pidCreateOutput)
-        self._insertFunctionStep(self.closeStep, prerequisites=pIdList)
+        self._insertFunctionStep(self.closeStep, prerequisites=pIdList, needsGPU=False)
 
     def _initialize(self):
         self.inTsSet = self._getInputTs()

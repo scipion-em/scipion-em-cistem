@@ -231,7 +231,7 @@ class CistemProtUnblur(ProtAlignMovies):
 
     def _insertFinalSteps(self, deps):
         stepId = self._insertFunctionStep('waitForThreadStep',
-                                          prerequisites=deps)
+                                          prerequisites=deps, needsGPU=False)
         return [stepId]
 
     def waitForThreadStep(self):

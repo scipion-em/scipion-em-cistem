@@ -168,8 +168,9 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             self._insertInitialSteps()
             self._insertFunctionStep('_pickMicrographStep',
                                      self.getInputMicrographs(),
-                                     *self._getPickArgs())
-            self._insertFunctionStep('createOutputStep')
+                                     *self._getPickArgs(),
+                                     needsGPU=False)
+            self._insertFunctionStep('createOutputStep', needsGPU=False)
 
             # Disable streaming functions:
             self._insertFinalSteps = self._doNothing
@@ -181,7 +182,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         refsId = inputRefs.strId() if inputRefs is not None else None
         convertId = self._insertFunctionStep('convertInputStep',
                                              self.getInputMicrographs().strId(),
-                                             refsId)
+                                             refsId, needsGPU=False)
         return [convertId]
 
     def _doNothing(self, *args):
