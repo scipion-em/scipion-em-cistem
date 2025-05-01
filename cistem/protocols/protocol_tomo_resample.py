@@ -102,9 +102,10 @@ class CistemProtTomoResample(EMProtocol, ProtTomoBase):
         for tomo in self.inTomograms.get():
 
             self._insertFunctionStep(self.runTomoResample,
-                                     tomo.getFileName())
+                                     tomo.getFileName(),
+                                     needsGPU=False)
 
-        self._insertFunctionStep(self.createOutputStep)
+        self._insertFunctionStep(self.createOutputStep, needsGPU=False)
 
     # --------------------------- STEPS functions -----------------------------
 

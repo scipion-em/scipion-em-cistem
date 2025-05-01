@@ -100,9 +100,10 @@ class CistemProtTsResample(EMProtocol, ProtTomoBase):
         for ts in self.inputSetOfTiltSeries.get():
 
             self._insertFunctionStep(self.runTsResample,
-                                     ts.getFirstItem().getFileName())
+                                     ts.getFirstItem().getFileName(),
+                                     needsGPU=False)
 
-        self._insertFunctionStep(self.createOutputStep)
+        self._insertFunctionStep(self.createOutputStep, needsGPU=False)
 
     # --------------------------- STEPS functions -----------------------------
     def runTsResample(self, tsFile: str):

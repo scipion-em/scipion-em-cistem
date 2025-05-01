@@ -86,10 +86,10 @@ class CistemProtTsCtffind(EMProtocol):
     _label = 'tilt-series ctffind'
     _devStatus = PROD
     _possibleOutputs = TsCtffindOutputs
+    stepsExecutionMode = STEPS_PARALLEL
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.stepsExecutionMode = STEPS_PARALLEL
         self.usePowerSpectra = False
         self.useStacks = True
         self.tsCtfMdList = []
@@ -160,13 +160,16 @@ class CistemProtTsCtffind(EMProtocol):
         pIdList = []
         for mdObj in self.tsCtfMdList:
             pidConvert = self._insertFunctionStep(self.convertInputStep,
-                                                  mdObj, prerequisites=[])
+                                                  mdObj, prerequisites=[],
+                                                  needsGPU=False)
             pidProcess = self._insertFunctionStep(self.processTiltSeriesStep,
-                                                  mdObj, prerequisites=pidConvert)
+                                                  mdObj, prerequisites=pidConvert,
+                                                  needsGPU=False)
             pidCreateOutput = self._insertFunctionStep(self.createOutputStep,
-                                                       mdObj, prerequisites=pidProcess)
+                                                       mdObj, prerequisites=pidProcess,
+                                                       needsGPU=False)
             pIdList.append(pidCreateOutput)
-        self._insertFunctionStep(self.closeStep, prerequisites=pIdList)
+        self._insertFunctionStep(self.closeStep, prerequisites=pIdList, needsGPU=False)
 
     def _initialize(self):
         self.inTsSet = self._getInputTs()
