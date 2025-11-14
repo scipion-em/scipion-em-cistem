@@ -184,6 +184,14 @@ class CistemProtUnblur(ProtAlignMovies):
         line.addParam('HWVertFourMask', params.IntParam, default=1,
                       label='Vert. mask (px)')
 
+        form.addParam('binThreads', params.IntParam,
+                      label='threads',
+                      default=1,
+                      help='Number of threads used by ProDy each time it is called in the protocol execution. For '
+                           'example, if 3 Scipion threads and 6 ProDy threads are set, the structures will be '
+                           'processed in groups of 2 at the same time with a call of ProDy with 6 threads each, so '
+                           '12 threads will be used at the same time. Beware the memory of your machine has '
+                           'memory enough to load together the number of structures specified by Scipion threads.')
         form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- STEPS functions -----------------------------
