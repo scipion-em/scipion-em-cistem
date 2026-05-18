@@ -41,7 +41,185 @@ from ..constants import LOW_VARIANCE, FIND_PARTICLES_BIN
 
 
 class CistemProtFindParticles(ProtParticlePickingAuto):
-    """ Protocol to pick particles (ab-initio or reference-based) using cisTEM. """
+    """
+    Detects particle coordinates in cryo-EM micrographs using either ab-initio
+    particle detection or reference-based template matching within the cisTEM
+    framework.
+
+    AI Generated:
+
+    Find Particles (CistemProtFindParticles) — User Manual
+        Overview
+
+        The Find Particles protocol performs automated particle picking on cryo-EM
+        micrographs using the cisTEM particle detection framework. Its main goal is
+        to identify candidate particle coordinates that can later be extracted and
+        used for downstream image processing steps such as 2D classification,
+        ab-initio reconstruction, or high-resolution refinement.
+
+        In practical cryo-EM workflows, particle picking is one of the most critical
+        stages because the quality of the selected coordinates strongly influences
+        all subsequent analyses. Reliable particle detection improves class averages,
+        reduces noise contamination, and increases the likelihood of obtaining
+        biologically meaningful reconstructions.
+
+        The protocol supports two complementary picking strategies. The first is an
+        ab-initio mode, which searches for particle-like features directly from the
+        statistical properties of the micrographs without requiring external
+        references. The second is a reference-based mode, which uses user-provided
+        2D templates to identify particles that resemble known projections or class
+        averages.
+
+        Inputs and General Workflow
+
+        The protocol requires a set of input micrographs together with associated
+        CTF estimations. The CTF information is biologically important because it
+        allows the detection procedure to account for microscope imaging conditions
+        such as defocus, astigmatism, and phase shift. Accurate CTF estimation
+        generally improves particle localization and reduces false positives.
+
+        In reference-based workflows, the protocol also requires a set of 2D
+        references or class averages. These templates guide the search toward
+        particles that resemble previously identified structural views. This
+        approach is especially useful for well-behaved samples or for refining
+        picking quality after an initial exploratory analysis.
+
+        During execution, the protocol analyzes each micrograph independently and
+        produces a set of particle coordinates that can later be inspected,
+        filtered, or extracted into boxed particle images.
+
+        Ab-initio Picking
+
+        In ab-initio mode, the protocol searches for particle-like density patterns
+        using generic structural assumptions rather than predefined templates. This
+        mode is often the preferred starting point when no reliable references are
+        available or when the biological sample is poorly characterized.
+
+        The characteristic particle radius is one of the most important parameters
+        in this mode because it defines the expected size of the particle signal.
+        The radius should approximately correspond to the compact central region of
+        the particle rather than its maximum dimension. Choosing a radius that is
+        too small may fragment large particles, whereas excessively large values
+        can increase background contamination.
+
+        The maximum particle radius controls the minimum separation between nearby
+        picks and helps avoid duplicate detections. This parameter should normally
+        reflect the largest expected particle dimension.
+
+        Threshold Selection and Particle Confidence
+
+        The detection threshold determines how strong a signal must be before it is
+        accepted as a particle candidate. Lower thresholds increase sensitivity and
+        may recover weak particles, but they also increase the number of false
+        positives. Higher thresholds produce cleaner coordinate sets but risk
+        missing low-contrast particles.
+
+        In biological practice, threshold optimization is often iterative. Users
+        commonly begin with conservative values, visually inspect the results, and
+        then relax or tighten the threshold depending on contamination levels,
+        particle visibility, and ice quality.
+
+        Reference-Based Picking
+
+        In reference-based mode, the protocol searches the micrographs using a set
+        of supplied 2D templates. This approach is particularly powerful when
+        recognizable class averages already exist from previous experiments or from
+        preliminary classifications.
+
+        The protocol allows the references to be rotationally averaged before
+        searching. Radial averaging is useful for approximately symmetric particles
+        or when reducing orientation bias is desirable. However, for strongly
+        anisotropic particles, preserving directional information in the templates
+        may improve detection accuracy.
+
+        Users may also enable template rotations during the search. This increases
+        orientation coverage and improves sensitivity for particles appearing in
+        multiple in-plane orientations, although it also increases computational
+        cost.
+
+        Background Suppression and Contamination Avoidance
+
+        Cryo-EM micrographs often contain contamination, carbon film edges, ice
+        crystals, or regions with abnormal intensity statistics. The protocol
+        includes several mechanisms to suppress detections in problematic areas.
+
+        One option excludes regions with unusually high local variance. This is
+        particularly useful for avoiding support film boundaries or strongly
+        contaminated regions. Another option suppresses areas with abnormal local
+        mean intensity, helping reduce picks over crystalline ice or dense
+        artifacts.
+
+        From a biological perspective, these filters are important because false
+        picks originating from contamination can severely degrade downstream 2D
+        classification and increase computational cost.
+
+        Resolution and Sampling Considerations
+
+        The protocol allows control over the highest resolution used during picking.
+        In most practical situations, moderate resolution limits are preferable
+        because particle detection relies more on global shape and contrast than on
+        fine structural detail.
+
+        Using excessively high resolution during picking may increase sensitivity to
+        noise and amplify imaging artifacts. Conversely, very low resolution limits
+        may oversmooth small particles or reduce the ability to discriminate nearby
+        objects.
+
+        The protocol internally adapts the search according to the micrograph
+        sampling rate and microscope acquisition parameters, ensuring that particle
+        dimensions are interpreted consistently in physical units.
+
+        Streaming and High-Throughput Processing
+
+        The protocol supports both conventional batch processing and streaming
+        workflows. In streaming mode, micrographs can be processed progressively as
+        they become available together with their corresponding CTF estimations.
+
+        This capability is especially valuable during automated data collection,
+        where rapid feedback about particle quality and concentration can guide
+        microscope optimization and acquisition decisions in real time.
+
+        Outputs and Interpretation
+
+        The primary output is a set of particle coordinates associated with the
+        input micrographs. These coordinates define the locations of candidate
+        particles that can later be extracted into boxed particle images.
+
+        The resulting coordinate set should always be inspected visually before
+        proceeding to extraction and classification. Even with optimized parameters,
+        automated picking may produce false positives, miss rare orientations, or
+        display biases toward high-contrast views.
+
+        In many biological workflows, users perform several rounds of optimization,
+        adjusting thresholds and particle size parameters until the coordinate
+        distribution appears consistent with the expected sample behavior.
+
+        Practical Recommendations
+
+        For unfamiliar datasets, ab-initio picking is often the safest starting
+        point because it avoids introducing template bias. Once initial 2D classes
+        become available, switching to reference-based picking can substantially
+        improve sensitivity and consistency.
+
+        Users should carefully tune the particle radius and threshold parameters,
+        since these typically have the strongest influence on picking quality.
+        Inspecting coordinates over several representative micrographs is essential
+        before launching large-scale processing.
+
+        Avoidance of abnormal variance and local mean regions is highly recommended
+        for contaminated datasets or challenging ice conditions. However, overly
+        aggressive filtering may also suppress legitimate particles near damaged or
+        heterogeneous regions.
+
+        Final Perspective
+
+        Automated particle picking is not merely a preprocessing convenience but a
+        biologically meaningful selection stage that determines which molecular
+        images contribute to downstream reconstruction. Thoughtful parameter
+        selection, careful validation of picked coordinates, and iterative
+        refinement of templates are essential for obtaining reliable cryo-EM
+        datasets suitable for high-resolution structural interpretation.
+    """
     _label = 'find particles'
     _devStatus = PROD
     stepsExecutionMode = STEPS_PARALLEL

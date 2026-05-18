@@ -29,6 +29,7 @@ import re
 
 import pwem
 import pyworkflow.utils as pwutils
+from pyworkflow import SPA, TOMO
 
 from .constants import *
 
@@ -43,6 +44,7 @@ class Plugin(pwem.Plugin):
     _pathVars = [CISTEM_HOME, CTFFIND_HOME]
     _supportedVersions = [V1_0_0]
     _url = "https://github.com/scipion-em/scipion-em-cistem"
+    _processingField = [SPA, TOMO]
 
     @classmethod
     def _defineVariables(cls):

@@ -59,28 +59,192 @@ class TsCtffindOutputs(Enum):
 
 
 class CistemProtTsCtffind(EMProtocol):
-    """ The contrast transfer function (CTF) affects the relative signal-to-noise
-    ratio (SNR) of Fourier components of each image. Those Fourier components
-    where the CTF is near 0.0 have very low SNR compared to others. It is therefore
-    essential to obtain accurate estimates of the CTF for each image so that
-    data from multiple images may be combined in an optimal manner during later
-    processing.\n
+    """
+    Estimates contrast transfer function parameters for tilt-series data using
+    cisTEM Ctffind, allowing accurate characterization of image defocus,
+    astigmatism, and related optical properties required for cryo-electron
+    tomography reconstruction and interpretation.
 
-    You can use CTFfind (Rohou & Grigorieff, 2015) to estimate CTF parameter values
-    for each image. The main parameter to be determined for each image is the
-    objective lens defocus (in Angstroms). Because in general lenses are astigmatic,
-    one actually needs to determine two defocus values (describing defocus along
-    the lens' major and minor axes) and the angle of astigmatism.\n
+    AI Generated:
 
-    To estimate the values of these three defocus parameters for an image,
-    CTFfind computes a filtered version of the amplitude spectrum of the micrograph
-    and then fits a model of the CTF (Equation 6 of Rohou & Grigorieff) to this
-    filtered amplitude spectrum. It then returns the values of the defocus parameters
-    which maximize the quality of the fit, as well as an image of the filtered
-    amplitude spectrum, with the CTF model.\n
+    Tilt-Series Ctffind (CistemProtTsCtffind) — User Manual
+        Overview
 
-    Another diagnostic output is a 1D plot of the experimental amplitude spectrum,
-    the CTF fit and the quality of fitting.
+        The Tilt-Series Ctffind protocol estimates the contrast transfer
+        function (CTF) of tilt-series images acquired during cryo-electron
+        tomography experiments. Accurate CTF estimation is essential because
+        the microscope optics modulate the transfer of structural information
+        into recorded images in a resolution-dependent manner. Without proper
+        correction and characterization of these optical effects, tomographic
+        reconstructions may suffer from reduced contrast, distorted frequency
+        information, and limited interpretability.
+
+        In practical cryo-ET workflows, this protocol is commonly applied
+        after tilt-series import and before tomographic reconstruction or
+        subtomogram averaging. The protocol determines defocus values,
+        astigmatism parameters, and additional diagnostic measurements for
+        each tilt image, generating a consistent set of CTF estimations that
+        can later be used during reconstruction, refinement, or downstream
+        structural analysis.
+
+        Biological Importance of CTF Estimation
+
+        In cryo-electron microscopy, the CTF alters how different spatial
+        frequencies are represented in recorded images. Some frequencies are
+        amplified while others become attenuated or inverted. Reliable
+        estimation of these effects is therefore fundamental for recovering
+        high-resolution structural information.
+
+        In tomography, the problem becomes even more important because each
+        tilt image is acquired under a different viewing geometry and often
+        under reduced signal-to-noise conditions. Errors in defocus estimation
+        can propagate through the reconstruction process and negatively affect
+        subtomogram averaging, particle localization, and interpretation of
+        flexible or heterogeneous biological assemblies.
+
+        The protocol is suitable for a wide range of biological samples,
+        including membrane proteins, viral particles, organelles, cellular
+        sections, and in situ tomography datasets. Accurate CTF estimation is
+        especially important in high-resolution subtomogram averaging
+        workflows, where small optical inaccuracies can strongly influence
+        the final achievable resolution.
+
+        Inputs and General Workflow
+
+        The protocol accepts tilt-series datasets or previously generated CTF
+        tilt-series metadata. Each tilt image within the series is analyzed
+        independently while preserving the organizational structure of the
+        original acquisition.
+
+        During processing, the protocol evaluates the amplitude spectrum of
+        each tilt image and determines the optical parameters that best match
+        the observed signal modulation. The resulting CTF estimations are
+        grouped into output CTF tilt-series objects that remain associated
+        with the corresponding tilt images throughout downstream tomography
+        processing.
+
+        The workflow is designed to support both conventional tomography
+        processing and more advanced cryo-ET pipelines where accurate optical
+        characterization is required for refinement, dose weighting, or
+        subtomogram averaging.
+
+        Defocus and Astigmatism Estimation
+
+        The main goal of the protocol is the estimation of objective lens
+        defocus and astigmatism. In practical terms, these parameters describe
+        how the microscope focus differs across image directions due to
+        imperfections in the optical system.
+
+        Biological users should interpret the estimated defocus values as a
+        description of the imaging conditions rather than as intrinsic sample
+        properties. Consistent defocus measurements across the tilt series
+        generally indicate stable acquisition conditions, whereas large
+        variations may suggest acquisition problems, specimen deformation, or
+        geometric inconsistencies.
+
+        Astigmatism measurements are also important because excessive
+        astigmatism may reduce achievable resolution or introduce directional
+        artifacts into tomographic reconstructions. Monitoring these values
+        provides useful quality-control information during data processing.
+
+        Tilt Geometry and Thickness Estimation
+
+        Advanced versions of the protocol support estimation of sample tilt
+        geometry and specimen thickness. These measurements can improve the
+        physical realism of the CTF model and enhance parameter estimation in
+        challenging tomography datasets.
+
+        Tilt estimation attempts to determine the orientation of the specimen
+        relative to the electron beam. Although computationally demanding,
+        this option may improve robustness when imaging geometry significantly
+        influences the observed spectra.
+
+        Thickness estimation can provide additional physical constraints that
+        improve CTF fitting quality, particularly for thicker specimens or
+        cellular tomography datasets. This feature becomes especially useful
+        in cryo-focused ion beam lamellae or dense in situ samples where
+        multiple scattering and thickness effects become more pronounced.
+
+        Different optimization approaches are available for thickness
+        estimation. Broad systematic searches provide increased robustness at
+        the expense of computation time, whereas refinement-oriented
+        approaches are often faster and suitable when acquisition conditions
+        are already well controlled.
+
+        Resolution Limits and Search Parameters
+
+        The protocol allows users to define resolution limits and defocus
+        search ranges that determine the parameter space explored during CTF
+        estimation. These settings strongly influence both reliability and
+        computational cost.
+
+        Lower-resolution limits help stabilize fitting by emphasizing stronger
+        low-frequency signal, whereas higher-resolution limits enable more
+        precise characterization when data quality permits. For noisy tilt
+        images or thick samples, conservative resolution ranges are generally
+        more reliable.
+
+        Defocus search ranges should reflect the expected acquisition
+        conditions. Excessively broad searches increase computation time and
+        may produce unstable solutions, while overly narrow ranges can prevent
+        convergence toward the correct values.
+
+        In routine cryo-ET processing, default values are often sufficient for
+        well-acquired datasets. However, difficult samples, highly tilted
+        images, or low-dose conditions may require careful optimization of
+        these parameters.
+
+        Outputs and Their Interpretation
+
+        The protocol produces a set of CTF estimations associated with the
+        original tilt series. Each tilt image receives its own CTF model and
+        associated diagnostic information, preserving the acquisition order
+        and tomography metadata.
+
+        Diagnostic outputs include power spectrum representations and
+        rotationally averaged fitting information that can be used to evaluate
+        the quality of the estimation. These diagnostics are valuable for
+        identifying problematic tilt images, poor signal conditions, charging
+        effects, or microscope instabilities.
+
+        Biologically, successful CTF estimation improves the interpretability
+        and consistency of tomographic reconstructions. Reliable optical
+        characterization contributes directly to better subtomogram averaging,
+        improved structural detail, and more accurate interpretation of
+        macromolecular organization within cells and tissues.
+
+        Practical Recommendations
+
+        For most cryo-electron tomography datasets, it is advisable to begin
+        with standard CTF estimation settings and visually inspect the
+        resulting diagnostic spectra. Stable and physically reasonable
+        defocus trends across tilt angles usually indicate successful
+        estimation.
+
+        For cellular tomography or thick specimens, enabling thickness-related
+        refinements may improve fitting quality. However, these options also
+        increase computational cost and should generally be reserved for
+        datasets where higher precision is required.
+
+        When processing highly tilted images, users should expect lower
+        signal-to-noise ratios and potentially reduced fitting stability.
+        Conservative resolution ranges and careful quality control become
+        particularly important under these conditions.
+
+        In high-resolution subtomogram averaging workflows, accurate CTF
+        estimation is one of the most critical preprocessing steps because
+        downstream refinement quality depends strongly on the reliability of
+        the optical parameters assigned to each tilt image.
+
+        Final Perspective
+
+        Reliable CTF estimation is a foundational component of cryo-electron
+        tomography data processing. By accurately characterizing microscope
+        optical effects across an entire tilt series, this protocol enables
+        more faithful tomographic reconstruction and more reliable biological
+        interpretation. Careful parameter selection, consistent quality
+        control, and awareness of specimen-specific imaging conditions are key
+        elements for obtaining robust and biologically meaningful results.
     """
 
     _label = 'tilt-series ctffind'

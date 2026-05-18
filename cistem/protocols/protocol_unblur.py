@@ -47,7 +47,169 @@ from ..constants import UNBLUR_BIN
 
 
 class CistemProtUnblur(ProtAlignMovies):
-    """ This protocol wraps unblur movie alignment program. """
+    """
+    Aligns cryo-EM movie frames using the Unblur algorithm in order to
+    correct beam-induced motion and generate high-quality averaged
+    micrographs for downstream single-particle analysis.
+
+    AI Generated:
+
+    Unblur Movie Alignment (CistemProtUnblur) — User Manual
+        Overview
+
+        The Unblur protocol performs frame alignment for cryo-EM movies by
+        correcting translational motion produced during electron exposure.
+        In single-particle cryo-EM, beam-induced motion is one of the major
+        causes of image blurring and loss of high-resolution information.
+        By aligning the individual frames of each movie, the protocol
+        restores structural detail and improves the quality of the final
+        averaged micrographs used for particle picking, classification,
+        and reconstruction.
+
+        This protocol is designed for both routine cryo-EM preprocessing
+        and demanding high-resolution workflows. It supports standard movie
+        alignment as well as exposure-weighted averaging, allowing users to
+        compensate for radiation damage accumulated during acquisition.
+        The protocol is especially useful for datasets collected on direct
+        electron detectors where movies contain many frames capturing sample
+        motion throughout the exposure.
+
+        Inputs and General Workflow
+
+        The protocol requires a set of cryo-EM movies together with their
+        acquisition metadata, including sampling rate, accelerating voltage,
+        and optionally dose information. During processing, the protocol
+        estimates frame-to-frame shifts and generates aligned averages that
+        represent motion-corrected micrographs suitable for downstream
+        analysis.
+
+        Users can define which frames are included in the alignment process.
+        This is biologically important because early frames may contain
+        strong motion caused by initial beam exposure, while late frames may
+        suffer from severe radiation damage. Restricting the aligned range
+        sometimes improves overall image quality and enhances high-resolution
+        signal preservation.
+
+        The protocol also supports optional binning before alignment. Binning
+        reduces image size and computational cost, which can be advantageous
+        during exploratory processing or when working with very large
+        datasets. However, excessive binning reduces the recoverable
+        resolution and should be used carefully in high-resolution projects.
+
+        Motion Correction Strategy
+
+        The alignment procedure iteratively refines the translational shifts
+        between movie frames until convergence is reached. Its purpose is to
+        compensate for specimen drift, stage instability, and beam-induced
+        particle motion that occur during acquisition. Correcting these
+        motions substantially improves particle visibility and the sharpness
+        of structural features.
+
+        The protocol allows users to define minimum and maximum allowed
+        shifts during alignment. These parameters help prevent unstable
+        alignments caused by detector artifacts or random noise peaks. In
+        biological practice, moderate limits often improve robustness,
+        especially for noisy datasets or movies with weak particle contrast.
+
+        Convergence settings determine how aggressively the refinement is
+        performed. Smaller convergence thresholds generally improve alignment
+        precision but increase processing time. Larger thresholds provide
+        faster execution but may leave residual motion uncorrected. The
+        maximum number of iterations controls the upper limit of refinement
+        cycles and is useful for preventing excessively long computations in
+        difficult datasets.
+
+        Exposure Filtering and Radiation Damage
+
+        One of the most biologically relevant features of the protocol is
+        exposure filtering. During cryo-EM acquisition, high-resolution
+        information progressively decays as radiation damage accumulates.
+        Exposure weighting compensates for this effect by giving reduced
+        importance to later frames that contain more damage.
+
+        In practical cryo-EM workflows, exposure filtering is commonly used
+        for high-resolution structure determination because it improves the
+        preservation of fine structural details. To use this feature
+        correctly, accurate dose-per-frame information must be available in
+        the acquisition metadata.
+
+        The protocol also allows restoration of noise power after exposure
+        filtering. This option improves the visual appearance and frequency
+        balance of the resulting micrographs, making them more suitable for
+        downstream processing and interpretation.
+
+        Filtering and Artifact Suppression
+
+        The protocol includes several filtering strategies designed to reduce
+        alignment instability caused by detector artifacts and noise. A
+        configurable B-factor can be applied to suppress excessive
+        high-frequency information during alignment refinement. This often
+        improves stability in noisy datasets and prevents the algorithm from
+        aligning to non-biological signal.
+
+        Additional masking options reduce the influence of artifacts located
+        along the central Fourier axes. These detector-related features are
+        common in cryo-EM movies and may bias alignment if not controlled.
+        Applying moderate masking generally improves robustness without
+        significantly affecting biological information.
+
+        Diagnostic Outputs and Visualization
+
+        Beyond generating aligned micrographs, the protocol can produce
+        diagnostic information useful for quality assessment. Users may
+        compute power spectrum density images and micrograph thumbnails for
+        rapid visual inspection of processing quality.
+
+        The protocol also generates alignment shift plots that summarize the
+        global trajectory of frame motion throughout the exposure. These
+        plots are biologically informative because they help identify movies
+        with excessive drift, unstable ice behavior, or acquisition problems.
+        Strong directional motion or unusually large cumulative shifts may
+        indicate problematic data collection conditions.
+
+        Outputs and Their Interpretation
+
+        The primary outputs are aligned micrographs that can be directly used
+        for particle picking and subsequent single-particle analysis. When
+        exposure filtering is enabled, dose-weighted micrographs are also
+        produced. These weighted averages are typically preferred for
+        high-resolution refinement workflows.
+
+        The protocol additionally preserves frame shift information, allowing
+        users to inspect motion trajectories and evaluate acquisition
+        stability. Diagnostic PSD images and thumbnails facilitate rapid
+        dataset screening and quality control during large-scale processing.
+
+        Practical Recommendations
+
+        For most cryo-EM datasets, it is advisable to begin with exposure
+        filtering enabled and standard convergence parameters. Carefully
+        inspecting alignment plots and PSD images can quickly reveal movies
+        affected by severe drift, charging, or acquisition artifacts.
+
+        When processing very noisy datasets, increasing the B-factor and
+        applying moderate Fourier masking often improves alignment stability.
+        Conversely, for highly stable datasets collected under optimized
+        conditions, less aggressive filtering may preserve more
+        high-resolution detail.
+
+        Frame selection is particularly important for difficult datasets.
+        Excluding strongly damaged late frames or unstable initial frames can
+        substantially improve downstream reconstructions. Biological users
+        should balance signal preservation against radiation damage according
+        to the goals of the experiment.
+
+        Final Perspective
+
+        In modern cryo-EM workflows, movie alignment is a foundational step
+        that directly influences the quality of all downstream analyses.
+        Reliable correction of beam-induced motion improves particle
+        visibility, enhances high-resolution information, and stabilizes
+        reconstruction quality. Careful adjustment of exposure filtering,
+        convergence behavior, and artifact suppression parameters allows the
+        protocol to adapt effectively to a broad range of biological samples
+        and acquisition conditions.
+    """
 
     _label = 'unblur'
     _devStatus = PROD

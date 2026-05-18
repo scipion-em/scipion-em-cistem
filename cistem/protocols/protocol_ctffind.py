@@ -41,10 +41,154 @@ from .program_ctffind import ProgramCtffind
 
 
 class CistemProtCTFFind(ProtCTFMicrographs):
-    """ Estimate CTF for a set of micrographs with ctffind.
-    
-    To find more information about ctffind visit:
-    https://grigoriefflab.umassmed.edu/ctffind4
+    """
+    Estimates the Contrast Transfer Function (CTF) parameters of cryo-EM
+    micrographs using CTFFIND. The protocol evaluates the optical effects
+    introduced by the electron microscope and determines parameters such as
+    defocus, astigmatism, and phase shift, which are essential for accurate
+    downstream reconstruction and image processing. More info:
+        https://grigoriefflab.umassmed.edu/ctffind4
+
+    AI Generated:
+
+    CTFFIND CTF Estimation (CistemProtCTFFind) — User Manual
+        Overview
+
+        The CTFFIND CTF Estimation protocol determines the optical transfer
+        characteristics of cryo-EM micrographs by analyzing their frequency
+        patterns. In cryo-electron microscopy, the Contrast Transfer Function
+        describes how different spatial frequencies are affected by the imaging
+        conditions of the microscope. Accurate estimation of these parameters is
+        one of the most important preprocessing steps because nearly all later
+        stages of reconstruction depend on reliable CTF correction.
+
+        For biological users, this protocol is typically applied immediately
+        after motion correction and before particle picking or classification.
+        The resulting defocus and astigmatism measurements are critical for
+        achieving high-resolution reconstructions and for evaluating the overall
+        quality of the dataset.
+
+        Inputs and General Workflow
+
+        The protocol operates on a collection of micrographs or associated power
+        spectra derived from them. In most workflows, users provide motion-
+        corrected micrographs directly, allowing the protocol to compute the
+        corresponding frequency-domain information internally. Alternatively,
+        externally generated power spectra may be supplied when preprocessing
+        pipelines already include spectral estimation steps.
+
+        During execution, the protocol evaluates the oscillatory signal present
+        in the Fourier transform of each micrograph and identifies the optical
+        parameters that best explain the observed Thon ring patterns. The
+        resulting CTF models are then associated with the corresponding
+        micrographs and become available for downstream cryo-EM processing.
+
+        Biological Importance of Accurate CTF Estimation
+
+        Correct CTF estimation directly influences the interpretability and
+        resolution of cryo-EM reconstructions. Poorly estimated defocus values
+        propagate errors throughout the processing workflow, reducing map
+        quality and potentially introducing artifacts into reconstructed
+        structures.
+
+        In practical biological studies, datasets often contain micrographs
+        acquired under slightly different optical conditions. The protocol
+        allows each image to be analyzed independently so that local variations
+        in defocus and astigmatism can be accurately captured. This becomes
+        particularly important in high-resolution single-particle analysis,
+        where small inaccuracies can significantly limit the final resolution.
+
+        Phase Shift Estimation
+
+        The protocol supports phase shift estimation for datasets collected
+        using phase plates. In these experiments, the microscope intentionally
+        modifies image contrast to improve visualization of weakly scattering
+        biological specimens. Estimating the phase shift correctly is essential
+        because inaccurate values may distort the recovered structural signal.
+
+        Biological users should define realistic phase shift search ranges that
+        reflect the acquisition conditions used during data collection. Very
+        broad or inconsistent search ranges may reduce stability and lead to
+        unreliable solutions.
+
+        Use of Power Spectra
+
+        In some workflows, users may choose to estimate CTF parameters directly
+        from precomputed power spectra instead of raw micrographs. This approach
+        can be useful in automated acquisition systems or specialized facility
+        pipelines where spectral preprocessing has already been optimized.
+
+        However, the quality of the provided spectra strongly determines the
+        robustness of the estimation. Poor spectral normalization, excessive
+        masking, or contamination may interfere with accurate fitting of the
+        Thon rings.
+
+        Interpretation of Results
+
+        After execution, the protocol generates a CTF model for each processed
+        micrograph. These models contain the estimated optical parameters and
+        associated diagnostic information used throughout the remainder of the
+        cryo-EM workflow.
+
+        From a biological perspective, users should inspect the consistency of
+        the estimated defocus values across the dataset. Large variations may
+        indicate acquisition instability, ice thickness heterogeneity, charging
+        effects, or contamination. Likewise, unusually high astigmatism values
+        can reflect microscope misalignment or data collection problems.
+
+        The generated power spectrum diagnostic images are particularly useful
+        for visual quality control. Well-defined and continuous Thon rings
+        generally indicate reliable estimation and good micrograph quality,
+        whereas weak or discontinuous rings may reveal drift, poor vitrification,
+        contamination, or low signal-to-noise conditions.
+
+        Streaming and High-Throughput Workflows
+
+        The protocol is compatible with streaming-oriented cryo-EM workflows,
+        allowing CTF estimation to proceed as new micrographs become available.
+        This capability is especially important in modern automated facilities,
+        where rapid feedback during acquisition helps users detect imaging
+        problems early and optimize microscope conditions in real time.
+
+        In high-throughput environments, streaming estimation can significantly
+        accelerate decision-making by enabling immediate assessment of defocus
+        distributions, phase shift stability, and overall dataset quality while
+        data collection is still ongoing.
+
+        Practical Recommendations
+
+        In routine biological practice, it is generally advisable to begin with
+        conservative default parameters and carefully inspect the resulting
+        diagnostic spectra before processing the entire dataset. Consistent Thon
+        ring visibility across multiple micrographs is often the best indicator
+        of stable acquisition conditions.
+
+        For phase-plate datasets, users should pay particular attention to the
+        selected phase shift search limits and verify that estimated values are
+        biologically and experimentally reasonable. Excessively noisy
+        micrographs or images containing crystalline ice contamination may
+        produce unstable estimations and are often best excluded from further
+        processing.
+
+        When working at very high resolution, accurate calibration of pixel size,
+        voltage, spherical aberration, and amplitude contrast becomes especially
+        important because small parameter inaccuracies can affect downstream
+        refinement quality.
+
+        Final Perspective
+
+        CTF estimation is one of the foundational steps of cryo-EM image
+        processing because it defines how microscope optics have altered the
+        recorded biological signal. Reliable estimation enables accurate
+        correction of imaging artifacts and establishes the basis for high-
+        resolution structural interpretation.
+
+        For most cryo-EM projects, careful inspection of CTF quality and
+        thoughtful interpretation of the resulting parameters are as important
+        as the numerical estimation itself. Stable optical measurements,
+        consistent Thon ring patterns, and biologically plausible defocus values
+        are key indicators of a high-quality dataset suitable for reliable
+        downstream reconstruction.
     """
     _label = 'ctffind'
     _devStatus = PROD
