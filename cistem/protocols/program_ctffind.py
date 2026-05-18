@@ -38,10 +38,151 @@ from ..convert import readCtfModel
 
 class ProgramCtffind:
     """
-    Wrapper of Ctffind program that will handle parameters definition
-    and also execution of the program with the proper arguments.
-    This class is not a Protocol, but somewhat related, since it can be used from
-    protocols that perform CTF estimation.
+    Provides a high-level interface for configuring and executing CTFFIND
+    within cryo-EM processing workflows. The class centralizes the definition
+    of acquisition parameters, search limits, and estimation strategies needed
+    for reliable determination of Contrast Transfer Function properties from
+    electron microscopy images.
+
+    AI Generated:
+
+    CTFFIND Program Interface (ProgramCtffind) — User Manual
+        Overview
+
+        The CTFFIND Program Interface provides a unified framework for
+        performing CTF estimation using the CTFFIND software package within
+        automated cryo-EM workflows. Its purpose is to simplify the
+        configuration and execution of CTF estimation tasks while ensuring that
+        microscope parameters, acquisition conditions, and estimation settings
+        remain consistent throughout processing.
+
+        In cryo-electron microscopy, accurate determination of the Contrast
+        Transfer Function is essential because the microscope modifies the
+        recorded biological signal in a frequency-dependent manner. Reliable
+        estimation of these optical effects is necessary before downstream
+        procedures such as particle picking, classification, refinement, and
+        reconstruction can be performed correctly.
+
+        General Workflow
+
+        The interface supports estimation from either micrographs or movie-
+        derived data products. In standard workflows, users provide aligned
+        micrographs that contain visible Thon ring patterns suitable for CTF
+        fitting. In some acquisition pipelines, the protocol may also operate
+        on externally generated power spectra that already summarize the
+        frequency information of the images.
+
+        The workflow is designed to integrate naturally into automated cryo-EM
+        processing environments. Users define microscope characteristics such
+        as voltage, spherical aberration, amplitude contrast, and sampling
+        rate, together with search ranges for defocus and resolution. The
+        interface then prepares the estimation process and generates CTF models
+        that can be used throughout subsequent reconstruction stages.
+
+        Resolution and Defocus Search Parameters
+
+        One of the most biologically important aspects of CTF estimation is the
+        selection of appropriate search limits. The protocol allows users to
+        define the resolution interval over which the fitting procedure is
+        performed. Lower-resolution limits help stabilize estimation in noisy
+        data, while higher-resolution limits determine how far fine structural
+        information contributes to the fit.
+
+        Defocus search ranges should reflect the expected acquisition
+        conditions of the microscope session. Narrow ranges improve efficiency
+        and robustness when imaging conditions are stable, whereas broader
+        ranges may be required for heterogeneous datasets or screening
+        experiments. Excessively broad ranges, however, can increase
+        computational cost and reduce estimation stability.
+
+        The protocol also allows adjustment of the FFT box size. Larger box
+        sizes may improve accuracy for high-resolution datasets by preserving
+        more detailed frequency information, although they require additional
+        computational resources.
+
+        Astigmatism Handling
+
+        The interface supports optional astigmatism restraint during fitting.
+        In most well-aligned microscopes, astigmatism is expected to remain
+        relatively small, and applying a restraint can improve the robustness
+        of the estimation process. This is particularly useful for noisy
+        micrographs or datasets collected under challenging imaging conditions.
+
+        In contrast, users working with datasets affected by strong optical
+        distortions or imperfect microscope alignment may prefer to relax these
+        restraints to allow more flexible fitting of elliptical Thon ring
+        patterns.
+
+        Phase Plate Experiments
+
+        The protocol includes dedicated support for phase shift estimation in
+        datasets collected using phase plates. These experiments intentionally
+        alter image contrast to enhance visualization of weak biological
+        specimens. Estimating the additional phase shift together with the
+        defocus parameters is essential for proper interpretation of the
+        recorded signal.
+
+        Biological users should define realistic phase shift ranges and step
+        sizes that match the experimental setup. Incorrect search limits may
+        produce unstable estimations or physically implausible solutions.
+
+        Tomographic and Thickness Measurements
+
+        The interface also supports advanced workflows related to cryo-electron
+        tomography and specimen thickness analysis. In these scenarios, the
+        estimation process may include tilt geometry evaluation and additional
+        measurements associated with ice thickness or spatially varying optical
+        conditions.
+
+        These capabilities are particularly valuable for tomographic datasets,
+        where imaging geometry and specimen thickness can vary substantially
+        across the field of view. Accurate modeling of these factors improves
+        downstream tomographic reconstruction and interpretation.
+
+        Outputs and Interpretation
+
+        The resulting CTF models contain estimated defocus values,
+        astigmatism, phase shift information, and associated spectral
+        diagnostics. These outputs become essential metadata for subsequent
+        cryo-EM processing stages and are commonly used for quality control and
+        dataset validation.
+
+        From a biological perspective, users should inspect whether estimated
+        parameters remain consistent across the dataset. Large fluctuations in
+        defocus, unstable phase shifts, or poorly defined Thon rings may
+        indicate contamination, charging, specimen drift, poor vitrification,
+        or microscope instability.
+
+        Practical Recommendations
+
+        In routine biological workflows, users are generally encouraged to
+        begin with conservative default parameters and inspect representative
+        spectra before scaling estimation to the entire dataset. Well-defined
+        and continuous Thon rings are typically the best indicator of reliable
+        fitting conditions.
+
+        For high-resolution projects, accurate microscope calibration and
+        realistic search limits become increasingly important. Small
+        inaccuracies in pixel size, voltage, or defocus estimation may
+        propagate into downstream refinements and limit the achievable map
+        resolution.
+
+        Phase plate and tomographic datasets often require additional
+        optimization and should be evaluated carefully to ensure that estimated
+        parameters remain physically meaningful and biologically consistent.
+
+        Final Perspective
+
+        The CTFFIND Program Interface serves as a central coordination layer
+        between cryo-EM processing workflows and the CTFFIND estimation engine.
+        By organizing acquisition metadata, search strategies, and estimation
+        parameters into a coherent framework, it helps ensure reliable and
+        reproducible determination of microscope optical properties.
+
+        For most cryo-EM studies, careful configuration of CTF estimation
+        parameters and thoughtful interpretation of the resulting models are
+        fundamental prerequisites for obtaining biologically meaningful
+        structural reconstructions.
     """
     def __init__(self, protocol):
         self._program = Plugin.getProgram(CTFFIND_BIN)  # Load program to use
