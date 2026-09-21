@@ -223,10 +223,13 @@ class CistemProtUnblur(ProtAlignMovies):
         :return: the error string
         """
         file = self._getShiftsFn(movie)
-        with open(file, "r") as fh:
-            for line in fh.readlines():
-                if line.startswith("Error"):
-                    return line.replace("Error:", "")
+        try:
+            with open(file, "r") as fh:
+                for line in fh.readlines():
+                    if line.startswith("Error"):
+                        return line.replace("Error:", "")
+        except OSError:
+            pass
         return e
 
     def _insertFinalSteps(self, deps):

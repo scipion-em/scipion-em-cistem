@@ -282,6 +282,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             except Exception as e:
                 self.error("ERROR: Picking has failed for %s. %s" % (
                     outMic, self._getErrorFromPickerTxt(mic, e)))
+                self._writeFailedList([mic])
 
     def _getErrorFromPickerTxt(self, mic, e):
         """ Parse output log for errors.
@@ -289,10 +290,13 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         :return: the error string
         """
         file = self._getLogFn(mic)
-        with open(file, "r") as fh:
-            for line in fh.readlines():
-                if line.startswith("Error"):
-                    return line.replace("Error:", "")
+        try:
+            with open(file, "r") as fh:
+                for line in fh.readlines():
+                    if line.startswith("Error"):
+                        return line.replace("Error:", "")
+        except OSError:
+            pass
         return e
 
     def createOutputStep(self):
@@ -481,6 +485,15 @@ eof"""
         micName = mic.getFileName()
         return os.path.join(self._getExtraPath(),
                             pwutils.replaceBaseExt(micName, 'plt'))
+
+    def _getAllFailed(self):
+        return self._getExtraPath('FAILED_all.TXT')
+
+    def _writeFailedList(self, micList):
+        """ Write to a text file the items that have failed. """
+        with open(self._getAllFailed(), 'a') as f:
+            for mic in micList:
+                f.write('%d\n' % mic.getObjId())
 
     def getInputReferences(self):
         return self.inputRefs.get() if self.inputRefs.hasValue() else None
