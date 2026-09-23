@@ -25,6 +25,7 @@
 # **************************************************************************
 
 import os
+from collections import OrderedDict
 
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL
@@ -188,6 +189,20 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
     def _doNothing(self, *args):
         pass  # used to avoid some streaming functions
 
+    def _loadSet(self, inputSet, SetClass, getKeyFunc):
+        """Load new items from the logical Set, independently of storage."""
+        self.debug("Loading logical input set.")
+        inputSet.loadAllProperties()
+
+        newItemDict = OrderedDict()
+        for item in inputSet.iterItems():
+            micKey = getKeyFunc(item)
+            if micKey not in self.micDict:
+                newItemDict[micKey] = item.clone()
+
+        streamClosed = inputSet.isStreamClosed()
+        return newItemDict, streamClosed
+
     def _loadInputList(self):
         """ This function is re-implemented in this protocol, because it has
          a SetOfCTF as input, so for streaming, we only want to report the
@@ -282,6 +297,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             except Exception as e:
                 self.error("ERROR: Picking has failed for %s. %s" % (
                     outMic, self._getErrorFromPickerTxt(mic, e)))
+                self._writeFailedList([mic])
 
     def _getErrorFromPickerTxt(self, mic, e):
         """ Parse output log for errors.
@@ -289,10 +305,13 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         :return: the error string
         """
         file = self._getLogFn(mic)
-        with open(file, "r") as fh:
-            for line in fh.readlines():
-                if line.startswith("Error"):
-                    return line.replace("Error:", "")
+        try:
+            with open(file, "r") as fh:
+                for line in fh.readlines():
+                    if line.startswith("Error"):
+                        return line.replace("Error:", "")
+        except OSError:
+            pass
         return e
 
     def createOutputStep(self):
@@ -481,6 +500,15 @@ eof"""
         micName = mic.getFileName()
         return os.path.join(self._getExtraPath(),
                             pwutils.replaceBaseExt(micName, 'plt'))
+
+    def _getAllFailed(self):
+        return self._getExtraPath('FAILED_all.TXT')
+
+    def _writeFailedList(self, micList):
+        """ Write to a text file the items that have failed. """
+        with open(self._getAllFailed(), 'a') as f:
+            for mic in micList:
+                f.write('%d\n' % mic.getObjId())
 
     def getInputReferences(self):
         return self.inputRefs.get() if self.inputRefs.hasValue() else None

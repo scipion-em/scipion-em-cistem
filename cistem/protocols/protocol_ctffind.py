@@ -108,10 +108,13 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         :return: the error string
         """
         file = self._getCtfOutPath(mic)
-        with open(file, "r") as fh:
-            for line in fh.readlines():
-                if "Error:" in line:
-                    return line.split("Error:")[-1]
+        try:
+            with open(file, "r") as fh:
+                for line in fh.readlines():
+                    if "Error:" in line:
+                        return line.split("Error:")[-1]
+        except OSError:
+            pass
         return e
 
     def _estimateCTF(self, mic, *args):
