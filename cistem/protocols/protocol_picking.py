@@ -25,6 +25,7 @@
 # **************************************************************************
 
 import os
+from collections import OrderedDict
 
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL
@@ -187,6 +188,20 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
     def _doNothing(self, *args):
         pass  # used to avoid some streaming functions
+
+    def _loadSet(self, inputSet, SetClass, getKeyFunc):
+        """Load new items from the logical Set, independently of storage."""
+        self.debug("Loading logical input set.")
+        inputSet.loadAllProperties()
+
+        newItemDict = OrderedDict()
+        for item in inputSet.iterItems():
+            micKey = getKeyFunc(item)
+            if micKey not in self.micDict:
+                newItemDict[micKey] = item.clone()
+
+        streamClosed = inputSet.isStreamClosed()
+        return newItemDict, streamClosed
 
     def _loadInputList(self):
         """ This function is re-implemented in this protocol, because it has

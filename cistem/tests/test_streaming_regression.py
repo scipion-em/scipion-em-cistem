@@ -250,5 +250,95 @@ class TestCistemStreamingRegression(unittest.TestCase):
             )
 
 
+    def testPickingStreamingLoadsLogicalSetsWithoutStorageFilename(self):
+        from collections import OrderedDict
+
+        class _Pointer:
+            def __init__(self, value):
+                self.value = value
+
+            def get(self):
+                return self.value
+
+        class _LogicalMic:
+            def __init__(self, objId, name):
+                self.objId = objId
+                self.name = name
+                self.ctf = None
+
+            def getObjId(self):
+                return self.objId
+
+            def getMicName(self):
+                return self.name
+
+            def setCTF(self, ctf):
+                self.ctf = ctf
+
+            def clone(self):
+                clone = _LogicalMic(self.objId, self.name)
+                clone.ctf = self.ctf
+                return clone
+
+        class _LogicalCtf:
+            def __init__(self, mic):
+                self.mic = mic
+
+            def getMicrograph(self):
+                return self.mic
+
+            def clone(self):
+                return _LogicalCtf(self.mic)
+
+        class _LogicalSet:
+            def __init__(self, items, closed=True):
+                self.items = list(items)
+                self.closed = closed
+                self.reloads = 0
+
+            def getFileName(self):
+                raise AssertionError(
+                    "CISTEM streaming must use the logical Set API, "
+                    "not reconstruct a Set from a persistence filename."
+                )
+
+            def loadAllProperties(self):
+                self.reloads += 1
+
+            def iterItems(self):
+                return iter(self.items)
+
+            def __iter__(self):
+                return self.iterItems()
+
+            def isStreamClosed(self):
+                return self.closed
+
+        class _LogicalPickingHarness(CistemProtFindParticles):
+            def __init__(self, micSet, ctfSet):
+                self.micDict = OrderedDict()
+                self._micSet = micSet
+                self.ctfRelations = _Pointer(ctfSet)
+
+            def getInputMicrographs(self):
+                return self._micSet
+
+            def debug(self, *args, **kwargs):
+                pass
+
+        mic = _LogicalMic(1, "mic_001")
+        micSet = _LogicalSet([mic])
+        ctfSet = _LogicalSet([_LogicalCtf(mic)])
+        protocol = _LogicalPickingHarness(micSet, ctfSet)
+
+        readyMics, streamClosed = protocol._loadInputList()
+
+        self.assertTrue(streamClosed)
+        self.assertEqual(["mic_001"], list(readyMics))
+        self.assertIsNotNone(readyMics["mic_001"].ctf)
+        self.assertGreaterEqual(micSet.reloads, 1)
+        self.assertGreaterEqual(ctfSet.reloads, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
