@@ -73,21 +73,28 @@ class CistemProtCTFFind(ProtCTFMicrographs):
             micFn = mic.getFileName()
             powerSpectraPix = None
         micDir = self._getTmpPath('mic_%06d' % mic.getObjId())
-        # Create micrograph dir
-        pwutils.makePath(micDir)
         micFnMrc = os.path.join(micDir, pwutils.replaceBaseExt(micFn, 'mrc'))
 
-        ih = emlib.image.ImageHandler()
-
-        if not os.path.exists(micFn):
-            raise FileNotFoundError("Missing input micrograph: %s" % micFn)
-
-        if micFn.endswith('.mrc'):
-            pwutils.createAbsLink(os.path.abspath(micFn), micFnMrc)
-        else:
-            ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
-
         try:
+            # Create micrograph dir and convert here (instead of
+            # outside this try) so a missing/corrupted micrograph is
+            # caught and logged per-micrograph, like every other
+            # failure in this function, instead of raising uncaught
+            # and crashing the whole protocol via the single-mic
+            # streaming step, which has no exception boundary of its
+            # own around _estimateCTF.
+            pwutils.makePath(micDir)
+
+            if not os.path.exists(micFn):
+                raise FileNotFoundError(
+                    "Missing input micrograph: %s" % micFn)
+
+            if micFn.endswith('.mrc'):
+                pwutils.createAbsLink(os.path.abspath(micFn), micFnMrc)
+            else:
+                ih = emlib.image.ImageHandler()
+                ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
+
             program, args = self._ctfProgram.getCommand(
                 micFn=micFnMrc,
                 powerSpectraPix=powerSpectraPix,

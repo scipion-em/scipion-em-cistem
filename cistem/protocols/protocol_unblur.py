@@ -189,10 +189,18 @@ class CistemProtUnblur(ProtAlignMovies):
     # --------------------------- STEPS functions -----------------------------
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
-        self._createTifLink(movie)
-        self._argsUnblur(movie)
-        
+
         try:
+            # processMovieStep (the pwem base class step calling this
+            # hook) has no exception boundary of its own around it - a
+            # single corrupted/unusual movie failing here (e.g. a bad
+            # tiff link or an acquisition attribute missing while
+            # building the unblur arguments) must not crash the whole
+            # protocol, so these are inside the try like every other
+            # failure in this function.
+            self._createTifLink(movie)
+            self._argsUnblur(movie)
+
             self.runJob(self._getProgram(), self._args, env=Plugin.getEnviron())
 
             def _extraWork():

@@ -225,26 +225,56 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self, micsId, refsId):
-        """ Match ctf information against the micrographs. """
+        """ Build the CTF lookup used as a fallback for non-streaming
+        picking (those micrographs never go through _loadInputList, so
+        they never get a CTF attached via mic.setCTF()), and convert
+        whatever micrographs are already available.
+
+        This step only runs once, near the start of the protocol, but
+        a streaming input Set keeps growing afterwards - a micrograph
+        (and its CTF) that arrives later would never be covered by this
+        snapshot. _pickMicrographStep therefore also converts lazily,
+        per micrograph, and prefers the always-fresh mic.getCTF()
+        (kept current by _loadInputList on every poll) over this
+        one-shot dict.
+        """
         self.ctfDict = {}
         if self.ctfRelations.get() is not None:
             for ctf in self.ctfRelations.get():
                 self.ctfDict[ctf.getMicrograph().getMicName()] = ctf.clone()
 
-        ih = emlib.image.ImageHandler()
         for mic in self.getInputMicrographs():
-            micName = mic.getFileName()
-            # We convert the input micrographs if they are not .mrc
-            outMic = os.path.join(self._getTmpPath(),
-                                  pwutils.replaceBaseExt(micName, 'mrc'))
-            if micName.endswith('.mrc'):
-                pwutils.createAbsLink(os.path.abspath(micName), outMic)
-            else:
-                ih.convert(micName, outMic, emlib.DT_FLOAT)
+            self._convertMic(mic)
 
         if refsId is not None:
             writeReferences(self.getInputReferences(),
                             self._getExtraPath('references.mrc'))
+
+    def _convertMic(self, mic):
+        """ Convert a micrograph to mrc in the tmp dir, if that has not
+        already been done. Idempotent, so it is safe to call again for
+        a micrograph convertInputStep already converted. """
+        micName = mic.getFileName()
+        outMic = os.path.join(self._getTmpPath(),
+                              pwutils.replaceBaseExt(micName, 'mrc'))
+        if not os.path.exists(outMic):
+            if micName.endswith('.mrc'):
+                pwutils.createAbsLink(os.path.abspath(micName), outMic)
+            else:
+                ih = emlib.image.ImageHandler()
+                ih.convert(micName, outMic, emlib.DT_FLOAT)
+        return outMic
+
+    def _getMicCtf(self, mic):
+        """ CTF for a micrograph reaching the picking step. Streaming
+        input already has it attached (kept fresh by _loadInputList on
+        every poll); non-streaming input never goes through
+        _loadInputList, so fall back to the snapshot built once in
+        convertInputStep. """
+        ctf = mic.getCTF()
+        if ctf is None:
+            ctf = self.ctfDict.get(mic.getMicName())
+        return ctf
 
     def _pickMicrograph(self, mic, *args):
         self._pickMicrographStep([mic], *args)
@@ -258,31 +288,33 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         :param args: programs args
         """
         for mic in mics:
-            micName = mic.getFileName()
-            outMic = os.path.join(self._getTmpPath(),
-                                  pwutils.replaceBaseExt(micName, 'mrc'))
-            ctf = self.ctfDict[mic.getMicName()]
-
-            args.update({'micName': outMic,
-                         'logFn': self._getLogFn(mic),
-                         'outStack': self._getStackFn(mic),
-                         'phaseShift': ctf.getPhaseShift() or 0.0,
-                         'defocusU': ctf.getDefocusU(),
-                         'defocusV': ctf.getDefocusV(),
-                         'defocusAngle': ctf.getDefocusAngle()
-                         })
-
-            if self.pickType == 1:
-                args.update({
-                    'refsFn': self._getExtraPath('references.mrc'),
-                    'useRadAvg': 'YES' if self.useRadAvg else 'NO',
-                    'rotateRef': self.rotateRef.get(),
-                })
-
-            argsStr = self._getArgsStr()
-            cmdArgs = argsStr % args
-
             try:
+                outMic = self._convertMic(mic)
+                ctf = self._getMicCtf(mic)
+                if ctf is None:
+                    raise Exception(
+                        "No CTF available for micrograph %s"
+                        % mic.getMicName())
+
+                args.update({'micName': outMic,
+                             'logFn': self._getLogFn(mic),
+                             'outStack': self._getStackFn(mic),
+                             'phaseShift': ctf.getPhaseShift() or 0.0,
+                             'defocusU': ctf.getDefocusU(),
+                             'defocusV': ctf.getDefocusV(),
+                             'defocusAngle': ctf.getDefocusAngle()
+                             })
+
+                if self.pickType == 1:
+                    args.update({
+                        'refsFn': self._getExtraPath('references.mrc'),
+                        'useRadAvg': 'YES' if self.useRadAvg else 'NO',
+                        'rotateRef': self.rotateRef.get(),
+                    })
+
+                argsStr = self._getArgsStr()
+                cmdArgs = argsStr % args
+
                 self.runJob(self._getProgram(), cmdArgs,
                             env=Plugin.getEnviron())
 
@@ -296,7 +328,7 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
                 pwutils.cleanPath(self._getStackFn(mic))
             except Exception as e:
                 self.error("ERROR: Picking has failed for %s. %s" % (
-                    outMic, self._getErrorFromPickerTxt(mic, e)))
+                    mic.getMicName(), self._getErrorFromPickerTxt(mic, e)))
                 self._writeFailedList([mic])
 
     def _getErrorFromPickerTxt(self, mic, e):
