@@ -28,11 +28,15 @@
 # *
 # **************************************************************************
 
+import json
 import os
+import time
+from collections import OrderedDict
+from datetime import datetime
 
 import pyworkflow.utils as pwutils
 from pyworkflow.constants import PROD
-from pyworkflow.object import Boolean
+from pyworkflow.object import Boolean, Set
 from pwem.protocols import ProtCTFMicrographs
 from pwem.objects import CTFModel
 from pwem import emlib
@@ -61,6 +65,84 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         self._ctfProgram = ProgramCtffind(self)
 
     # -------------------------- STEPS functions ------------------------------
+    def _insertAllSteps(self):
+        """Insert only the resumable streaming generator."""
+        self._insertFunctionStep(self.resumableStepGeneratorStep,
+                                 str(datetime.now()),
+                                 needsGPU=False)
+
+    def resumableStepGeneratorStep(
+            self,
+            timestamp,
+    ):
+        """Run the generator as a unique step on every resume."""
+        self.stepsGeneratorStep()
+
+    def stepsGeneratorStep(self):
+        """Discover, process and publish CTFs incrementally."""
+        self._defineCtfParamsDict()
+
+        self.micDict = OrderedDict()
+        self.streamClosed = False
+        self.finished = False
+        self.initialIds = self._insertInitialSteps()
+
+        self._restoreProcessedMicsFromPersistentState()
+
+        while not self.finished:
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if self.finished:
+                break
+
+            sleepOnWait = self._getStreamingSleepOnWait()
+
+            if sleepOnWait > 0:
+                self._streamingSleepOnWait()
+            else:
+                # The legacy streaming default is zero because polling was
+                # driven externally by _stepsCheck. A generator must yield
+                # CPU while waiting for new input or processing completion.
+                time.sleep(1)
+
+    def _stepsCheck(self):
+        """Persist steps created by the generator, without legacy polling."""
+        if getattr(
+                self,
+                "_newSteps",
+                False,
+        ):
+            self.updateSteps()
+
+    def _insertInitialSteps(self):
+        """No filesystem initialization is required for streaming state."""
+        return []
+
+    def estimateCtfStep(self, micName, *args):
+        """Estimate one CTF without filesystem completion markers.
+
+        The persisted protocol-step status is the completion authority.
+        """
+        mic = self.micDict[micName]
+
+        self.info("Estimating CTF of micrograph: %s " % mic.getObjId())
+
+        self._estimateCTF(mic, *args)
+
+    def estimateCtfListStep(
+            self,
+            micNameList,
+            *args,
+    ):
+        """Estimate a CTF batch without filesystem completion markers."""
+        micList = [self.micDict[micName] for micName in micNameList]
+
+        self.info("Estimating CTF for micrographs: %s"
+                  % [mic.getObjId() for mic in micList])
+
+        self._estimateCtfList(micList, *args)
+
     def _doCtfEstimation(self, mic, **kwargs):
         """ Run ctffind with required parameters.
         :param mic: input mic object
@@ -73,21 +155,28 @@ class CistemProtCTFFind(ProtCTFMicrographs):
             micFn = mic.getFileName()
             powerSpectraPix = None
         micDir = self._getTmpPath('mic_%06d' % mic.getObjId())
-        # Create micrograph dir
-        pwutils.makePath(micDir)
         micFnMrc = os.path.join(micDir, pwutils.replaceBaseExt(micFn, 'mrc'))
 
-        ih = emlib.image.ImageHandler()
-
-        if not os.path.exists(micFn):
-            raise FileNotFoundError("Missing input micrograph: %s" % micFn)
-
-        if micFn.endswith('.mrc'):
-            pwutils.createAbsLink(os.path.abspath(micFn), micFnMrc)
-        else:
-            ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
-
         try:
+            # Create micrograph dir and convert here (instead of
+            # outside this try) so a missing/corrupted micrograph is
+            # caught and logged per-micrograph, like every other
+            # failure in this function, instead of raising uncaught
+            # and crashing the whole protocol via the single-mic
+            # streaming step, which has no exception boundary of its
+            # own around _estimateCTF.
+            pwutils.makePath(micDir)
+
+            if not os.path.exists(micFn):
+                raise FileNotFoundError(
+                    "Missing input micrograph: %s" % micFn)
+
+            if micFn.endswith('.mrc'):
+                pwutils.createAbsLink(os.path.abspath(micFn), micFnMrc)
+            else:
+                ih = emlib.image.ImageHandler()
+                ih.convert(micFn, micFnMrc, emlib.DT_FLOAT)
+
             program, args = self._ctfProgram.getCommand(
                 micFn=micFnMrc,
                 powerSpectraPix=powerSpectraPix,
@@ -108,15 +197,225 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         :return: the error string
         """
         file = self._getCtfOutPath(mic)
-        with open(file, "r") as fh:
-            for line in fh.readlines():
-                if "Error:" in line:
-                    return line.split("Error:")[-1]
+        try:
+            with open(file, "r") as fh:
+                for line in fh.readlines():
+                    if "Error:" in line:
+                        return line.split("Error:")[-1]
+        except OSError:
+            pass
         return e
 
     def _estimateCTF(self, mic, *args):
         """ Redefined func from the base class. """
         self._doCtfEstimation(mic)
+
+    def _getPublishedCtfMicNames(self):
+        """Return micrographs already present in the logical CTF output."""
+        outputCtf = getattr(
+            self,
+            "outputCTF",
+            None,
+        )
+
+        if outputCtf is None:
+            return set()
+
+        iterator = outputCtf.iterItems() if hasattr(outputCtf, "iterItems") else iter(outputCtf)
+
+        publishedMicNames = set()
+
+        for ctf in iterator:
+            mic = ctf.getMicrograph()
+
+            if mic is not None:
+                publishedMicNames.add(mic.getMicName())
+
+        return publishedMicNames
+
+    def _getFinishedCtfMicNames(self):
+        """Return micrographs represented by finished CTF processing steps."""
+        finishedMicNames = set()
+
+        for step in getattr(
+                self,
+                "_steps",
+                [],
+        ):
+            if not step.isFinished():
+                continue
+
+            funcName = getattr(step, "funcName", None)
+
+            if hasattr(funcName, "get"):
+                funcName = funcName.get()
+
+            if funcName not in (
+                    "estimateCtfStep",
+                    "estimateCtfListStep",
+            ):
+                continue
+
+            argsStr = getattr(step, "argsStr", None)
+
+            if hasattr(argsStr, "get"):
+                argsStr = argsStr.get("[]")
+
+            try:
+                args = json.loads(argsStr or "[]")
+            except (
+                    TypeError,
+                    ValueError,
+            ):
+                continue
+
+            if not args:
+                continue
+
+            micArg = args[0]
+
+            if (
+                    funcName
+                    == "estimateCtfListStep"
+            ):
+                if isinstance(micArg, list):
+                    finishedMicNames.update(micArg)
+            else:
+                finishedMicNames.add(micArg)
+
+        return finishedMicNames
+
+    def _restoreProcessedMicsFromPersistentState(self):
+        """Restore already processed inputs when resuming the generator.
+
+        Published CTFs and finished processing steps are persistent state.
+        Seeding micDict with their corresponding logical input objects keeps
+        discovery incremental after Continue without filesystem markers.
+        """
+        processedMicNames = (self._getPublishedCtfMicNames()
+                             | self._getFinishedCtfMicNames())
+
+        if not processedMicNames:
+            return
+
+        inputMics = self.getInputMicrographs()
+        inputMics.loadAllProperties()
+
+        for mic in inputMics.iterItems():
+            micName = mic.getMicName()
+
+            if micName in processedMicNames:
+                self.micDict[micName] = mic.clone()
+
+    def _checkNewOutput(self):
+        """Publish finished CTF steps without filesystem sidecars.
+
+        Processing completion comes from persisted step state. Publication
+        state comes from the logical output Set. This makes resume and
+        streaming independent of DONE marker files.
+        """
+        if getattr(
+            self,
+            "finished",
+            False,
+        ):
+            return
+
+        publishedMicNames = self._getPublishedCtfMicNames()
+
+        finishedMicNames = self._getFinishedCtfMicNames()
+
+        listOfMics = list(self.micDict.values())
+
+        newDone = [
+            mic
+            for mic in listOfMics
+            if (
+                mic.getMicName()
+                in finishedMicNames
+                and mic.getMicName()
+                not in publishedMicNames
+            )
+        ]
+
+        completedMicNames = (
+            publishedMicNames
+            | finishedMicNames
+        )
+
+        allDone = all(
+            mic.getMicName()
+            in completedMicNames
+            for mic in listOfMics
+        )
+
+        self.finished = self.streamClosed and allDone
+
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
+        if newDone:
+            self._updateOutputCTFSet(newDone, streamMode)
+        elif not self.finished:
+            if allDone:
+                self._streamingSleepOnWait()
+
+            return
+
+        if self.finished:
+            self._updateStreamState(streamMode)
+
+            outputStep = self._getFirstJoinStep()
+
+            if outputStep and outputStep.isWaiting():
+                from pyworkflow.protocol.constants import (
+                    STATUS_NEW,
+                )
+
+                outputStep.setStatus(STATUS_NEW)
+
+    def _checkNewInput(self):
+        """Discover new micrographs from the logical Set.
+
+        The input Set itself is authoritative. Do not use a storage
+        filename or filesystem modification time as a change detector.
+        """
+        micDict, self.streamClosed = self._loadInputList()
+
+        newMics = micDict.values()
+        outputStep = self._getFirstJoinStep()
+
+        if newMics:
+            dependencies = self._insertNewMicsSteps(newMics)
+
+            if outputStep is not None:
+                outputStep.addPrerequisites(*dependencies)
+
+            self.updateSteps()
+
+    def _loadSet(
+            self,
+            inputSet,
+            SetClass,
+            getKeyFunc,
+    ):
+        """Load new items from the logical Set, independently of storage."""
+        self.debug(
+            "Loading logical input set."
+        )
+
+        inputSet.loadAllProperties()
+
+        newItemDict = OrderedDict()
+
+        for item in inputSet.iterItems():
+            itemKey = getKeyFunc(item)
+
+            if itemKey not in self.micDict:
+                newItemDict[itemKey] = item.clone()
+
+        streamClosed = inputSet.isStreamClosed()
+
+        return newItemDict, streamClosed
 
     def _createCtfModel(self, mic, updateSampling=False):
         """ Redefined func from the base class. """
