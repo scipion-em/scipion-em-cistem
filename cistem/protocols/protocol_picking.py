@@ -24,11 +24,16 @@
 # *
 # **************************************************************************
 
+import json
 import os
+import time
 from collections import OrderedDict
+from datetime import datetime
 
+import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.constants import PROD
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
@@ -152,17 +157,18 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
         self._defineStreamingParams(form)
 
-        form.addParallelSection(threads=1)
+        form.addParallelSection(threads=3)
 
     # -------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         self.inputStreaming = self.getInputMicrographs().isStreamOpen()
 
-        if self.streamingBatchSize > 0 or self.inputStreaming:
-            # If the input is in streaming, follow the base class policy
-            # about inserting new steps and discovery new input/output
-            self.createOutputStep = self._doNothing
-            ProtParticlePickingAuto._insertAllSteps(self)
+        if self.inputStreaming:
+            self._insertFunctionStep(
+                self.resumableStepGeneratorStep,
+                str(datetime.now()),
+                needsGPU=False,
+            )
         else:
             # If not in streaming, then we will just insert a single step to
             # pick all micrographs at once since it is much faster
@@ -176,6 +182,37 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             # Disable streaming functions:
             self._insertFinalSteps = self._doNothing
             self._stepsCheck = self._doNothing
+
+    def resumableStepGeneratorStep(self, timestamp):
+        """Run the streaming generator as a single resumable step."""
+        self.stepsGeneratorStep()
+
+    def stepsGeneratorStep(self):
+        """Discover, pick and publish micrographs incrementally."""
+        self.micDict = OrderedDict()
+        self.streamClosed = False
+        self.finished = False
+        self.initialIds = self._insertInitialSteps()
+
+        self._restoreProcessedMicsFromPersistentState()
+
+        while not self.finished:
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if self.finished:
+                break
+
+            sleepOnWait = self._getStreamingSleepOnWait()
+            if sleepOnWait > 0:
+                self._streamingSleepOnWait()
+            else:
+                time.sleep(1)
+
+    def _stepsCheck(self):
+        """Persist steps created by the generator without legacy polling."""
+        if getattr(self, '_newSteps', False):
+            self.updateSteps()
 
     def _insertInitialSteps(self):
         """ Convert the input micrographs to mrc. """
@@ -222,6 +259,170 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
         # Return the updated micDict and the closed status
         return readyMics, micClose and ctfClosed
+
+    def _checkNewInput(self):
+        """Discover ready micrographs directly from logical input Sets."""
+        micDict, self.streamClosed = self._loadInputList()
+        newMics = micDict.values()
+        outputStep = self._getFirstJoinStep()
+
+        if newMics:
+            dependencies = self._insertNewMicsSteps(newMics)
+            if outputStep is not None:
+                outputStep.addPrerequisites(*dependencies)
+            self.updateSteps()
+
+    def _getFinishedPickingMicNames(self):
+        """Return mic names represented by finished picking steps."""
+        finishedNames = set()
+
+        for step in getattr(self, '_steps', []):
+            if not step.isFinished():
+                continue
+
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+
+            if funcName not in ('pickMicrographStep', 'pickMicrographListStep'):
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+
+            if not args:
+                continue
+
+            if funcName == 'pickMicrographStep':
+                if isinstance(args[0], str):
+                    finishedNames.add(args[0])
+            elif isinstance(args[0], list):
+                finishedNames.update(
+                    micName for micName in args[0]
+                    if isinstance(micName, str)
+                )
+
+        return finishedNames
+
+    def _getScheduledPickingMicNames(self):
+        """Return mic names represented by persisted picking steps."""
+        scheduledNames = set()
+
+        for step in getattr(self, '_steps', []):
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+
+            if funcName not in ('pickMicrographStep', 'pickMicrographListStep'):
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+
+            if not args:
+                continue
+
+            if funcName == 'pickMicrographStep':
+                if isinstance(args[0], str):
+                    scheduledNames.add(args[0])
+            elif isinstance(args[0], list):
+                scheduledNames.update(
+                    micName for micName in args[0]
+                    if isinstance(micName, str)
+                )
+
+        return scheduledNames
+
+    def _restoreProcessedMicsFromPersistentState(self):
+        """Restore published and already scheduled inputs before discovery."""
+        processedNames = (
+            self._getPublishedPickingMicNames()
+            | self._getScheduledPickingMicNames()
+        )
+
+        if not processedNames:
+            return
+
+        inputMics = self.getInputMicrographs()
+        inputMics.loadAllProperties()
+
+        for mic in inputMics.iterItems():
+            micName = mic.getMicName()
+            if micName in processedNames:
+                self.micDict[micName] = mic.clone()
+
+    def _getPublishedPickingMicNames(self):
+        published = getattr(self, '_publishedPickingMicNames', None)
+        if published is None:
+            return set()
+
+        value = published.get()
+        if not value:
+            return set()
+
+        try:
+            names = json.loads(value)
+        except (TypeError, ValueError):
+            return set()
+
+        return set(names) if isinstance(names, list) else set()
+
+    def _markPublishedPickingMics(self, micList):
+        publishedNames = self._getPublishedPickingMicNames()
+        publishedNames.update(mic.getMicName() for mic in micList)
+
+        value = json.dumps(sorted(publishedNames))
+        published = getattr(self, '_publishedPickingMicNames', None)
+
+        if published is None:
+            self._publishedPickingMicNames = pwobj.String(value)
+        else:
+            published.set(value)
+
+        self._store()
+
+    def _checkNewOutput(self):
+        """Publish finished picking steps without DONE sidecars."""
+        if getattr(self, 'finished', False):
+            return
+
+        finishedNames = self._getFinishedPickingMicNames()
+        publishedNames = self._getPublishedPickingMicNames()
+        newDone = [
+            mic for mic in self.micDict.values()
+            if mic.getMicName() in finishedNames
+            and mic.getMicName() not in publishedNames
+        ]
+
+        allMicNames = set(self.micDict)
+        self.finished = self.streamClosed and allMicNames.issubset(finishedNames)
+        streamMode = pwobj.Set.STREAM_CLOSED if self.finished else pwobj.Set.STREAM_OPEN
+
+        if newDone:
+            publishedMics = self._updateOutputCoordSet(newDone, streamMode)
+            self._markPublishedPickingMics(publishedMics)
+        elif not self.finished:
+            if allMicNames.issubset(finishedNames):
+                self._streamingSleepOnWait()
+            return
+
+        if self.finished:
+            self._updateStreamState(streamMode)
+            outputStep = self._getFirstJoinStep()
+            if outputStep and outputStep.isWaiting():
+                outputStep.setStatus(STATUS_NEW)
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self, micsId, refsId):
@@ -275,6 +476,19 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         if ctf is None:
             ctf = self.ctfDict.get(mic.getMicName())
         return ctf
+
+    def pickMicrographStep(self, micName, *args):
+        """Pick one micrograph without filesystem completion sidecars."""
+        mic = self.micDict[micName]
+        self.info("Picking micrograph: %s " % mic.getFileName())
+        self._pickMicrograph(mic, *args)
+
+    def pickMicrographListStep(self, micNameList, *args):
+        """Pick a batch of micrographs without completion sidecars."""
+        micList = [self.micDict[micName] for micName in micNameList]
+        for mic in micList:
+            self.info("Picking micrograph: %s " % mic.getFileName())
+        self._pickMicrographList(micList, *args)
 
     def _pickMicrograph(self, mic, *args):
         self._pickMicrographStep([mic], *args)
@@ -357,6 +571,23 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         self._defineSourceRelation(self.inputMicrographs, coordSet)
 
     # --------------------------- INFO functions --------------------------------
+    def _validateStreamingThreads(self):
+        inputMics = self.getInputMicrographs()
+
+        if (inputMics is not None
+                and inputMics.isStreamOpen()
+                and self.numberOfThreads.get() < 3):
+            return [
+                'FindParticles streaming requires at least 3 threads.'
+            ]
+
+        return []
+
+    def _validate(self):
+        errors = ProtParticlePickingAuto._validate(self)
+        errors.extend(self._validateStreamingThreads())
+        return errors
+
     def _summary(self):
         summary = list()
         summary.append("Number of input micrographs: %d"
@@ -537,10 +768,8 @@ eof"""
         return self._getExtraPath('FAILED_all.TXT')
 
     def _writeFailedList(self, micList):
-        """ Write to a text file the items that have failed. """
-        with open(self._getAllFailed(), 'a') as f:
-            for mic in micList:
-                f.write('%d\n' % mic.getObjId())
+        """Do not persist failed micrographs in filesystem sidecars."""
+        pass
 
     def getInputReferences(self):
         return self.inputRefs.get() if self.inputRefs.hasValue() else None

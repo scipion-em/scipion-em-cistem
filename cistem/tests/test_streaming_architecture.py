@@ -10,6 +10,7 @@ from cistem.protocols.protocol_ctffind import (
     CistemProtCTFFind,
 )
 from cistem.protocols.protocol_unblur import CistemProtUnblur
+from cistem.protocols.protocol_picking import CistemProtFindParticles
 
 
 class _Mic:
@@ -21,6 +22,9 @@ class _Mic:
         return self._objId
 
     def getMicName(self):
+        return self._micName
+
+    def getFileName(self):
         return self._micName
 
     def clone(self):
@@ -1373,4 +1377,501 @@ class TestCistemUnblurMissingShiftsFailure(unittest.TestCase):
         )
 
         self.assertIs(message, originalError)
+
+
+class _FindParticlesInputSetGuard:
+    def getFileName(self):
+        raise AssertionError(
+            "FindParticles streaming discovery must not depend on a SQLite/storage filename."
+        )
+
+
+class _FindParticlesInputCheckHarness:
+    def __init__(self):
+        self.streamClosed = False
+        self.micDict = {}
+        self.joinStep = _JoinStep()
+        self.insertedMicNames = []
+        self.updateStepsCalls = 0
+        self.readyMic = _Mic(1, "mic_001")
+        self.inputSet = _FindParticlesInputSetGuard()
+
+    def getInputMicrographs(self):
+        return self.inputSet
+
+    def _loadInputList(self):
+        return {self.readyMic.getMicName(): self.readyMic}, False
+
+    def _insertNewMicsSteps(self, newMics):
+        newMics = list(newMics)
+        self.insertedMicNames.extend(mic.getMicName() for mic in newMics)
+        return [101 + index for index, _ in enumerate(newMics)]
+
+    def _getFirstJoinStep(self):
+        return self.joinStep
+
+    def updateSteps(self):
+        self.updateStepsCalls += 1
+
+
+class TestCistemFindParticlesStreamingInputChecks(unittest.TestCase):
+    def test_FindParticlesStreamingChecksLogicalInputWithoutFilesystemMtime(self):
+        protocol = _FindParticlesInputCheckHarness()
+
+        CistemProtFindParticles._checkNewInput(protocol)
+
+        self.assertEqual(["mic_001"], protocol.insertedMicNames)
+        self.assertEqual([101], protocol.joinStep.prerequisites)
+        self.assertEqual(1, protocol.updateStepsCalls)
+        self.assertFalse(protocol.streamClosed)
+
+
+class _FinishedPickingStep:
+    def __init__(self, funcName, argsStr):
+        self.funcName = _StoredValue(funcName)
+        self.argsStr = _StoredValue(argsStr)
+
+    def isFinished(self):
+        return True
+
+
+class _PendingPickingStep(_FinishedPickingStep):
+    def isFinished(self):
+        return False
+
+
+class _FindParticlesFinishedStepsHarness:
+    def __init__(self):
+        self._steps = [
+            _FinishedPickingStep(
+                "pickMicrographStep",
+                '["mic_001", {}]',
+            ),
+            _FinishedPickingStep(
+                "pickMicrographListStep",
+                '[["mic_002", "mic_003"], {}]',
+            ),
+            _PendingPickingStep(
+                "pickMicrographStep",
+                '["mic_004", {}]',
+            ),
+        ]
+
+
+class TestCistemFindParticlesFinishedStepState(unittest.TestCase):
+    def test_FindParticlesGetsFinishedMicrographsFromPersistedSteps(self):
+        protocol = _FindParticlesFinishedStepsHarness()
+
+        finished = CistemProtFindParticles._getFinishedPickingMicNames(protocol)
+
+        self.assertEqual(
+            {"mic_001", "mic_002", "mic_003"},
+            finished,
+        )
+
+
+class _FindParticlesOutputCheckHarness:
+    def __init__(self):
+        mic = _Mic(1, "mic_001")
+        self.micDict = {mic.getMicName(): mic}
+        self.streamClosed = False
+        self.finished = False
+        self._steps = [
+            _FinishedPickingStep(
+                "pickMicrographStep",
+                '["mic_001", {}]',
+            ),
+        ]
+        self.publishedMicNames = set()
+        self.publishCalls = []
+        self.sleepCalls = 0
+
+    def _readDoneList(self):
+        raise AssertionError(
+            "FindParticles output publication must not depend on DONE/all.TXT."
+        )
+
+    def _isMicDone(self, mic):
+        raise AssertionError(
+            "FindParticles output publication must not depend on DONE/mic_*.TXT."
+        )
+
+    def _getFinishedPickingMicNames(self):
+        return CistemProtFindParticles._getFinishedPickingMicNames(self)
+
+    def _getPublishedPickingMicNames(self):
+        return set(self.publishedMicNames)
+
+    def _markPublishedPickingMics(self, micList):
+        self.publishedMicNames.update(mic.getMicName() for mic in micList)
+
+    def _updateOutputCoordSet(self, micList, streamMode):
+        micList = list(micList)
+        self.publishCalls.append([mic.getMicName() for mic in micList])
+        return micList
+
+    def _getFirstJoinStep(self):
+        return None
+
+    def _streamingSleepOnWait(self):
+        self.sleepCalls += 1
+
+    def debug(self, *args, **kwargs):
+        pass
+
+
+class TestCistemFindParticlesStreamingCompletion(unittest.TestCase):
+    def test_FindParticlesPublishesFinishedStepWithoutDoneSidecars(self):
+        protocol = _FindParticlesOutputCheckHarness()
+
+        CistemProtFindParticles._checkNewOutput(protocol)
+        CistemProtFindParticles._checkNewOutput(protocol)
+
+        self.assertEqual(
+            [["mic_001"]],
+            protocol.publishCalls,
+        )
+        self.assertEqual(
+            {"mic_001"},
+            protocol.publishedMicNames,
+        )
+
+
+class _FindParticlesPublishedStateHarness:
+    def __init__(self, persistedValue=None):
+        self.storeCalls = 0
+        if persistedValue is not None:
+            self._publishedPickingMicNames = _StoredValue(persistedValue)
+
+    def _getPublishedPickingMicNames(self):
+        return CistemProtFindParticles._getPublishedPickingMicNames(self)
+
+    def _store(self):
+        self.storeCalls += 1
+
+
+class TestCistemFindParticlesPublishedStatePersistence(unittest.TestCase):
+    def test_FindParticlesPersistsPublishedMicrographWithoutCoordinates(self):
+        mic = _Mic(1, "mic_001")
+        protocol = _FindParticlesPublishedStateHarness()
+
+        CistemProtFindParticles._markPublishedPickingMics(protocol, [mic])
+
+        self.assertEqual(1, protocol.storeCalls)
+        persistedValue = protocol._publishedPickingMicNames.get()
+
+        reloaded = _FindParticlesPublishedStateHarness(persistedValue)
+
+        self.assertEqual(
+            {"mic_001"},
+            CistemProtFindParticles._getPublishedPickingMicNames(reloaded),
+        )
+
+
+class _FindParticlesNoDoneProcessingHarness:
+    def __init__(self):
+        self.micDict = {
+            "mic_001": _Mic(1, "mic_001"),
+            "mic_002": _Mic(2, "mic_002"),
+        }
+        self.pickedMicNames = []
+        self.batchPickedMicNames = []
+
+    def isContinued(self):
+        return True
+
+    def _getMicDone(self, mic):
+        raise AssertionError(
+            "FindParticles processing must not depend on per-micrograph DONE sidecars."
+        )
+
+    def _pickMicrograph(self, mic, *args):
+        self.pickedMicNames.append(mic.getMicName())
+
+    def _pickMicrographList(self, micList, *args):
+        self.batchPickedMicNames.extend(mic.getMicName() for mic in micList)
+
+    def info(self, *args, **kwargs):
+        pass
+
+
+class TestCistemFindParticlesStreamingProcessing(unittest.TestCase):
+    def test_FindParticlesSingleProcessingDoesNotUseDoneSidecar(self):
+        protocol = _FindParticlesNoDoneProcessingHarness()
+
+        CistemProtFindParticles.pickMicrographStep(
+            protocol,
+            "mic_001",
+        )
+
+        self.assertEqual(
+            ["mic_001"],
+            protocol.pickedMicNames,
+        )
+
+    def test_FindParticlesBatchProcessingDoesNotUseDoneSidecars(self):
+        protocol = _FindParticlesNoDoneProcessingHarness()
+
+        CistemProtFindParticles.pickMicrographListStep(
+            protocol,
+            ["mic_001", "mic_002"],
+        )
+
+        self.assertEqual(
+            ["mic_001", "mic_002"],
+            protocol.batchPickedMicNames,
+        )
+
+
+class _FindParticlesFailedSidecarHarness:
+    def _getAllFailed(self):
+        raise AssertionError(
+            "FindParticles failure state must not depend on FAILED_all.TXT."
+        )
+
+
+class TestCistemFindParticlesFailurePersistence(unittest.TestCase):
+    def test_FindParticlesDoesNotWriteFailedMicrographSidecar(self):
+        protocol = _FindParticlesFailedSidecarHarness()
+
+        CistemProtFindParticles._writeFailedList(
+            protocol,
+            [_Mic(1, "mic_001")],
+        )
+
+
+class _FindParticlesStreamingInput:
+    def isStreamOpen(self):
+        return True
+
+
+class _FindParticlesStreamingInsertHarness:
+    streamingBatchSize = 1
+
+    def __init__(self):
+        self.inputStreaming = False
+        self.insertCalls = []
+        self.legacyInitialCalls = 0
+        self.legacyLoadCalls = 0
+        self.legacyFinalCalls = 0
+
+    def getInputMicrographs(self):
+        return _FindParticlesStreamingInput()
+
+    def resumableStepGeneratorStep(self, timestamp):
+        pass
+
+    def _insertFunctionStep(self, funcName, *args, **kwargs):
+        if callable(funcName):
+            funcName = funcName.__name__
+
+        self.insertCalls.append({
+            "funcName": funcName,
+            "args": args,
+            "kwargs": kwargs,
+        })
+        return len(self.insertCalls)
+
+    def _insertInitialSteps(self):
+        self.legacyInitialCalls += 1
+        return []
+
+    def _loadInputList(self):
+        self.legacyLoadCalls += 1
+        return {}, False
+
+    def _insertNewMicsSteps(self, mics):
+        return []
+
+    def _insertFinalSteps(self, deps):
+        self.legacyFinalCalls += 1
+        return deps
+
+    def _getAllDone(self):
+        raise AssertionError(
+            "FindParticles streaming orchestration must not create DONE/all.TXT."
+        )
+
+
+class TestCistemFindParticlesGeneratorOrchestration(unittest.TestCase):
+    def test_FindParticlesStreamingUsesSingleResumableGenerator(self):
+        protocol = _FindParticlesStreamingInsertHarness()
+
+        CistemProtFindParticles._insertAllSteps(protocol)
+
+        self.assertTrue(protocol.inputStreaming)
+        self.assertEqual(0, protocol.legacyInitialCalls)
+        self.assertEqual(0, protocol.legacyLoadCalls)
+        self.assertEqual(0, protocol.legacyFinalCalls)
+
+        self.assertEqual(1, len(protocol.insertCalls))
+        self.assertEqual(
+            "resumableStepGeneratorStep",
+            protocol.insertCalls[0]["funcName"],
+        )
+        self.assertFalse(
+            protocol.insertCalls[0]["kwargs"].get("needsGPU", True)
+        )
+
+
+class _ScheduledPickingStep:
+    def __init__(self, funcName, argsStr, finished=False):
+        self.funcName = _StoredValue(funcName)
+        self.argsStr = _StoredValue(argsStr)
+        self._finished = finished
+
+    def isFinished(self):
+        return self._finished
+
+
+class _FindParticlesResumeLogicalSet:
+    def __init__(self, items, streamClosed=True):
+        self._items = list(items)
+        self._streamClosed = streamClosed
+
+    def loadAllProperties(self):
+        pass
+
+    def iterItems(self):
+        return iter(self._items)
+
+    def isStreamClosed(self):
+        return self._streamClosed
+
+
+class _FindParticlesResumeHarness:
+    def __init__(self):
+        self.micDict = {}
+        self.streamClosed = False
+        self.finished = False
+        self.initialIds = []
+        self.scheduledMicNames = []
+        self._inputMics = _FindParticlesResumeLogicalSet([
+            _Mic(1, "mic_001"),
+            _Mic(2, "mic_002"),
+            _Mic(3, "mic_003"),
+        ])
+        self._steps = [
+            _ScheduledPickingStep(
+                "pickMicrographStep",
+                '["mic_002", {}]',
+                finished=False,
+            ),
+        ]
+        self._publishedPickingMicNames = _StoredValue(
+            '["mic_001"]'
+        )
+
+    def getInputMicrographs(self):
+        return self._inputMics
+
+    def _getPublishedPickingMicNames(self):
+        return CistemProtFindParticles._getPublishedPickingMicNames(self)
+
+    def _getScheduledPickingMicNames(self):
+        return CistemProtFindParticles._getScheduledPickingMicNames(self)
+
+    def _restoreProcessedMicsFromPersistentState(self):
+        return CistemProtFindParticles._restoreProcessedMicsFromPersistentState(self)
+
+    def _loadInputList(self):
+        self._inputMics.loadAllProperties()
+
+        newMics = {}
+        for mic in self._inputMics.iterItems():
+            micName = mic.getMicName()
+            if micName not in self.micDict:
+                newMics[micName] = mic.clone()
+
+        return newMics, self._inputMics.isStreamClosed()
+
+    def _insertNewMicsSteps(self, newMics):
+        newMics = list(newMics)
+        self.scheduledMicNames.extend(mic.getMicName() for mic in newMics)
+        for mic in newMics:
+            self.micDict[mic.getMicName()] = mic
+        return []
+
+    def _getFirstJoinStep(self):
+        return None
+
+    def updateSteps(self):
+        pass
+
+    def debug(self, *args, **kwargs):
+        pass
+
+
+class TestCistemFindParticlesGeneratorResumeSafety(unittest.TestCase):
+    def test_FindParticlesResumeDoesNotReschedulePublishedOrScheduledMicrographs(self):
+        protocol = _FindParticlesResumeHarness()
+
+        CistemProtFindParticles._restoreProcessedMicsFromPersistentState(protocol)
+        CistemProtFindParticles._checkNewInput(protocol)
+
+        self.assertEqual(
+            ["mic_003"],
+            protocol.scheduledMicNames,
+        )
+        self.assertEqual(
+            {"mic_001", "mic_002", "mic_003"},
+            set(protocol.micDict),
+        )
+
+
+class _FindParticlesThreadParam:
+    def __init__(self, value):
+        self._value = value
+
+    def get(self):
+        return self._value
+
+
+class _FindParticlesThreadInput:
+    def __init__(self, streamOpen):
+        self._streamOpen = streamOpen
+
+    def isStreamOpen(self):
+        return self._streamOpen
+
+
+class _FindParticlesThreadValidationHarness:
+    def __init__(self, threads, streamOpen):
+        self.numberOfThreads = _FindParticlesThreadParam(threads)
+        self._inputMics = _FindParticlesThreadInput(streamOpen)
+
+    def getInputMicrographs(self):
+        return self._inputMics
+
+
+class TestCistemFindParticlesStreamingThreadValidation(unittest.TestCase):
+    def test_FindParticlesStreamingRejectsOneExecutionWorker(self):
+        protocol = _FindParticlesThreadValidationHarness(
+            threads=2,
+            streamOpen=True,
+        )
+
+        errors = CistemProtFindParticles._validateStreamingThreads(protocol)
+
+        self.assertTrue(errors)
+
+    def test_FindParticlesStreamingAcceptsTwoExecutionWorkers(self):
+        protocol = _FindParticlesThreadValidationHarness(
+            threads=3,
+            streamOpen=True,
+        )
+
+        errors = CistemProtFindParticles._validateStreamingThreads(protocol)
+
+        self.assertEqual([], errors)
+
+    def test_FindParticlesNonStreamingStillAcceptsOneThread(self):
+        protocol = _FindParticlesThreadValidationHarness(
+            threads=1,
+            streamOpen=False,
+        )
+
+        errors = CistemProtFindParticles._validateStreamingThreads(protocol)
+
+        self.assertEqual([], errors)
 
