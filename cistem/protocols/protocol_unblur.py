@@ -28,13 +28,17 @@
 # *
 # **************************************************************************
 
+import json
 import time
+from datetime import datetime
 from math import ceil
 from threading import Thread
 
+import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
 
 from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.constants import PROD
 import pyworkflow.protocol.params as params
 from pyworkflow.gui.plotter import Plotter
@@ -184,9 +188,293 @@ class CistemProtUnblur(ProtAlignMovies):
         line.addParam('HWVertFourMask', params.IntParam, default=1,
                       label='Vert. mask (px)')
 
-        form.addParallelSection(threads=1, mpi=1)
+        form.addParallelSection(threads=3, mpi=1)
 
     # --------------------------- STEPS functions -----------------------------
+    def _insertAllSteps(self):
+        self.insertedDict = {}
+        self.samplingRate = self.inputMovies.get().getSamplingRate()
+
+        convertStepId = self._insertFunctionStep('_convertInputStep', prerequisites=[])
+        self.convertCIStep = [convertStepId]
+
+        generatorStepId = self._insertFunctionStep(
+            'resumableStepGeneratorStep',
+            str(datetime.now()),
+            prerequisites=self.convertCIStep,
+            needsGPU=False
+        )
+
+        finalSteps = self._insertFinalSteps([generatorStepId])
+        self._insertFunctionStep('createOutputStep',
+                                 prerequisites=finalSteps, wait=True)
+
+    def resumableStepGeneratorStep(self, timestamp):
+        self.stepsGeneratorStep()
+
+    def stepsGeneratorStep(self):
+        self.insertedDict = getattr(self, 'insertedDict', {})
+        self.streamClosed = False
+        self.finished = False
+
+        self._restoreProcessedMoviesFromPersistentState()
+
+        while not self.finished:
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if self.finished:
+                break
+
+            sleepOnWait = self._getStreamingSleepOnWait()
+            if sleepOnWait > 0:
+                self._streamingSleepOnWait()
+            else:
+                time.sleep(1)
+
+    def _stepsCheck(self):
+        if getattr(self, '_newSteps', False):
+            self.updateSteps()
+
+    def _convertInputStep(self):
+        """Convert correction images without creating DONE sidecars."""
+        movies = self.inputMovies.get()
+        movies.setGain(self._ProtProcessMovies__convertCorrectionImage(movies.getGain()))
+        movies.setDark(self._ProtProcessMovies__convertCorrectionImage(movies.getDark()))
+
+    def _loadInputList(self):
+        """Load movies directly from the logical input Set."""
+        movieSet = self.inputMovies.get()
+        self.debug("Loading logical input movie set.")
+        movieSet.loadAllProperties()
+        self.listOfMovies = [movie.clone() for movie in movieSet.iterItems()]
+        self.streamClosed = movieSet.isStreamClosed()
+
+    def _checkNewInput(self):
+        """Discover new movies from the logical input Set."""
+        self._loadInputList()
+
+        newMovies = any(movie.getObjId() not in self.insertedDict
+                        for movie in self.listOfMovies)
+        outputStep = self._getFirstJoinStep()
+
+        if newMovies:
+            dependencies = self._insertNewMoviesSteps(self.insertedDict, self.listOfMovies)
+            if outputStep is not None:
+                outputStep.addPrerequisites(*dependencies)
+            self.updateSteps()
+
+    def _getPublishedMovieIds(self):
+        """Return movie ids already present in logical outputs."""
+        publishedIds = set()
+        outputNames = (
+            'outputMicrographs',
+            'outputMicrographsDoseWeighted',
+            'outputMovies',
+            'outputMicrographsEven',
+            'outputMicrographsOdd',
+        )
+
+        for outputName in outputNames:
+            outputSet = getattr(self, outputName, None)
+            if outputSet is None:
+                continue
+
+            iterator = outputSet.iterItems() if hasattr(outputSet, 'iterItems') else iter(outputSet)
+            for item in iterator:
+                itemId = item.getObjId()
+                if itemId is not None:
+                    publishedIds.add(itemId)
+
+        return publishedIds
+
+    def _getScheduledMovieIds(self):
+        """Return movie ids represented by persisted processMovieStep steps."""
+        scheduledIds = set()
+
+        for step in getattr(self, '_steps', []):
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+
+            if funcName != 'processMovieStep':
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+
+            if not args or not isinstance(args[0], dict):
+                continue
+
+            movieId = args[0].get('object.id')
+            if movieId is not None:
+                scheduledIds.add(movieId)
+
+        return scheduledIds
+
+    def _restoreProcessedMoviesFromPersistentState(self):
+        """Restore already published or scheduled movies before discovery."""
+        restoredIds = self._getPublishedMovieIds() | self._getScheduledMovieIds()
+
+        for movieId in restoredIds:
+            self.insertedDict.setdefault(movieId, movieId)
+
+    def _getFinishedMovieIds(self):
+        """Return movie ids represented by finished processMovieStep steps."""
+        finishedIds = set()
+
+        for step in getattr(self, '_steps', []):
+            if not step.isFinished():
+                continue
+
+            funcName = getattr(step, 'funcName', None)
+            if hasattr(funcName, 'get'):
+                funcName = funcName.get()
+
+            if funcName != 'processMovieStep':
+                continue
+
+            argsStr = getattr(step, 'argsStr', None)
+            if hasattr(argsStr, 'get'):
+                argsStr = argsStr.get('[]')
+
+            try:
+                args = json.loads(argsStr or '[]')
+            except (TypeError, ValueError):
+                continue
+
+            if not args or not isinstance(args[0], dict):
+                continue
+
+            movieId = args[0].get('object.id')
+            if movieId is not None:
+                finishedIds.add(movieId)
+
+        return finishedIds
+
+    def _checkNewOutput(self):
+        """Publish finished movies without filesystem completion markers."""
+        if getattr(self, 'finished', False):
+            return
+
+        publishedIds = self._getPublishedMovieIds()
+        finishedIds = self._getFinishedMovieIds()
+        newDone = [movie for movie in self.listOfMovies
+                   if movie.getObjId() in finishedIds and movie.getObjId() not in publishedIds]
+
+        self._firstTimeOutput = len(publishedIds) == 0
+        completedIds = publishedIds | finishedIds
+        inputIds = {movie.getObjId() for movie in self.listOfMovies}
+        self.finished = self.streamClosed and inputIds.issubset(completedIds)
+        streamMode = pwobj.Set.STREAM_CLOSED if self.finished else pwobj.Set.STREAM_OPEN
+
+        if not newDone and not self.finished:
+            return
+
+        self._updateOutputSets(newDone, streamMode)
+
+        if self.finished:
+            outputStep = self._getFirstJoinStep()
+            if outputStep and outputStep.isWaiting():
+                outputStep.setStatus(STATUS_NEW)
+
+    def processMovieStep(self, movieDict, hasAlignment):
+        """Process one movie using the protocol step status as completion state."""
+        import os
+
+        import pwem.objects as emobj
+        import pyworkflow.object as pwobj
+        from pwem import emlib
+
+        movie = emobj.Movie()
+        movie.setAcquisition(emobj.Acquisition())
+
+        if hasAlignment:
+            movie.setAlignment(emobj.MovieAlignment())
+
+        movie.setAttributesFromDict(movieDict, setBasic=True, ignoreMissing=True)
+
+        movieFolder = self._getOutputMovieFolder(movie)
+        movieFn = movie.getFileName()
+        movieName = os.path.basename(movieFn)
+
+        if self._filterMovie(movie):
+            pwutils.makePath(movieFolder)
+            pwutils.createAbsLink(os.path.abspath(movieFn),
+                                  os.path.join(movieFolder, movieName))
+
+            if movieName.endswith('bz2'):
+                newMovieName = movieName.replace('.bz2', '')
+                if not os.path.exists(newMovieName):
+                    self.runJob('bzip2', '-d -f %s' % movieName, cwd=movieFolder)
+
+            elif movieName.endswith('tbz'):
+                newMovieName = movieName.replace('.tbz', '.mrc')
+                if not os.path.exists(newMovieName):
+                    self.runJob('tar', 'jxf %s' % movieName, cwd=movieFolder)
+
+            elif movieName.endswith('.txt'):
+                movieTxt = os.path.join(movieFolder, movieName)
+                with open(movieTxt) as handle:
+                    movieOrigin = os.path.basename(os.readlink(movieFn))
+                    newMovieName = movieName.replace('.txt', '.mrcs')
+                    imageHandler = emlib.image.ImageHandler()
+                    for index, line in enumerate(handle):
+                        if line.strip():
+                            inputFrame = os.path.join(movieOrigin, line.strip())
+                            imageHandler.convert(
+                                inputFrame,
+                                (index + 1, os.path.join(movieFolder, newMovieName))
+                            )
+            else:
+                newMovieName = movieName
+
+            convertExt = self._getConvertExtension(newMovieName)
+            correctGain = self._doCorrectGain()
+
+            if convertExt or correctGain:
+                inputMovieFn = os.path.join(movieFolder, newMovieName)
+                if inputMovieFn.endswith('.em'):
+                    inputMovieFn += ':ems'
+
+                if convertExt:
+                    newMovieName = pwutils.replaceExt(newMovieName, convertExt)
+                else:
+                    newMovieName = '%s_corrected.%s' % os.path.splitext(newMovieName)
+
+                outputMovieFn = os.path.join(movieFolder, newMovieName)
+
+                if self._doCorrectGain():
+                    self.info("Correcting gain and dark '%s' -> '%s'"
+                              % (inputMovieFn, outputMovieFn))
+                    gain, dark = self.getGainAndDark()
+                    self.correctGain(inputMovieFn, outputMovieFn,
+                                     gainFn=gain, darkFn=dark)
+                else:
+                    self.info("Converting movie '%s' -> '%s'"
+                              % (inputMovieFn, outputMovieFn))
+                    emlib.image.ImageHandler().convertStack(inputMovieFn, outputMovieFn)
+
+            movie._originalFileName = pwobj.String(objDoStore=False)
+            movie._originalFileName.set(movie.getFileName())
+            movie.setFileName(os.path.join(movieFolder, newMovieName))
+            self.info("Processing movie: %s" % movie.getFileName())
+
+            self._processMovie(movie)
+
+            if self._doMovieFolderCleanUp():
+                self._cleanMovieFolder(movieFolder)
+
+    def _writeFailedList(self, movieList):
+        """Do not persist failed movies in filesystem sidecars."""
+        pass
+
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
 
@@ -268,9 +556,15 @@ class CistemProtUnblur(ProtAlignMovies):
     def _citations(self):
         return ["Campbell2012", "Grant2015b"]
 
+    def _validateStreamingThreads(self):
+        if self.numberOfThreads.get() < 3:
+            return ['Unblur streaming requires at least 3 threads.']
+        return []
+
     def _validate(self):
         # Check base validation before the specific ones
         errors = ProtAlignMovies._validate(self)
+        errors.extend(self._validateStreamingThreads())
 
         if self.doApplyDoseFilter and self.inputMovies.get():
             inputMovies = self.inputMovies.get()

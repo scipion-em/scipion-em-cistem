@@ -9,6 +9,7 @@ import unittest
 from cistem.protocols.protocol_ctffind import (
     CistemProtCTFFind,
 )
+from cistem.protocols.protocol_unblur import CistemProtUnblur
 
 
 class _Mic:
@@ -939,4 +940,437 @@ class TestCistemCtffindGeneratorInitialization(unittest.TestCase):
 
         self.assertEqual(protocol.initialIds, [])
         self.assertEqual(protocol.initialStepCalls, 1)
+
+
+class _UnblurPointer:
+    def __init__(self, value):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+
+class _LogicalMovie:
+    def __init__(self, objId):
+        self.objId = objId
+
+    def getObjId(self):
+        return self.objId
+
+    def clone(self):
+        return _LogicalMovie(self.objId)
+
+
+class _LogicalMovieSet:
+    def __init__(self, movies, streamClosed=True):
+        self.movies = list(movies)
+        self.streamClosed = streamClosed
+        self.reloads = 0
+
+    def getFileName(self):
+        raise AssertionError(
+            "Unblur streaming discovery must not depend on a SQLite/storage filename."
+        )
+
+    def loadAllProperties(self):
+        self.reloads += 1
+
+    def iterItems(self):
+        return iter(self.movies)
+
+    def __iter__(self):
+        return self.iterItems()
+
+    def isStreamClosed(self):
+        return self.streamClosed
+
+
+class _UnblurLogicalInputHarness:
+    def __init__(self, movieSet):
+        self.inputMovies = _UnblurPointer(movieSet)
+
+    def debug(self, *args, **kwargs):
+        pass
+
+
+class TestCistemUnblurStreamingArchitecture(unittest.TestCase):
+    def test_UnblurStreamingLoadsLogicalMoviesWithoutStorageFilename(self):
+        movieSet = _LogicalMovieSet([
+            _LogicalMovie(1),
+            _LogicalMovie(2),
+        ], streamClosed=True)
+        protocol = _UnblurLogicalInputHarness(movieSet)
+
+        CistemProtUnblur._loadInputList(protocol)
+
+        self.assertTrue(protocol.streamClosed)
+        self.assertEqual([1, 2], [movie.getObjId() for movie in protocol.listOfMovies])
+        self.assertGreaterEqual(movieSet.reloads, 1)
+
+
+class _UnblurInputCheckHarness:
+    def __init__(self, movieSet):
+        self.inputMovies = _UnblurPointer(movieSet)
+        self.insertedDict = {}
+        self.listOfMovies = []
+        self.streamClosed = False
+        self.insertedMovieIds = []
+        self.updateCalls = 0
+
+    def debug(self, *args, **kwargs):
+        pass
+
+    def _loadInputList(self):
+        return CistemProtUnblur._loadInputList(self)
+
+    def _getFirstJoinStep(self):
+        return None
+
+    def _insertNewMoviesSteps(self, insertedDict, inputMovies):
+        deps = []
+        for movie in inputMovies:
+            movieId = movie.getObjId()
+            if movieId not in insertedDict:
+                self.insertedMovieIds.append(movieId)
+                insertedDict[movieId] = movieId
+                deps.append(movieId)
+        return deps
+
+    def updateSteps(self):
+        self.updateCalls += 1
+
+
+class TestCistemUnblurStreamingInputChecks(unittest.TestCase):
+    def test_UnblurStreamingChecksLogicalInputWithoutFilesystemMtime(self):
+        movieSet = _LogicalMovieSet([
+            _LogicalMovie(1),
+            _LogicalMovie(2),
+        ], streamClosed=False)
+        protocol = _UnblurInputCheckHarness(movieSet)
+
+        CistemProtUnblur._checkNewInput(protocol)
+
+        self.assertEqual([1, 2], protocol.insertedMovieIds)
+        self.assertEqual({1: 1, 2: 2}, protocol.insertedDict)
+        self.assertFalse(protocol.streamClosed)
+        self.assertGreaterEqual(movieSet.reloads, 1)
+        self.assertEqual(1, protocol.updateCalls)
+
+
+class _FinishedMovieStep:
+    funcName = "processMovieStep"
+    argsStr = '[{"object.id": 1}, false]'
+
+    def isFinished(self):
+        return True
+
+
+class _UnblurOutputCheckHarness:
+
+    def _getPublishedMovieIds(self):
+        return CistemProtUnblur._getPublishedMovieIds(self)
+
+    def _getFinishedMovieIds(self):
+        return CistemProtUnblur._getFinishedMovieIds(self)
+
+    def __init__(self):
+        self.listOfMovies = [_LogicalMovie(1)]
+        self.streamClosed = False
+        self.finished = False
+        self._steps = [_FinishedMovieStep()]
+        self.publishedMovieIds = []
+
+    def _readDoneList(self):
+        raise AssertionError(
+            "Unblur output publication must not read DONE/all.TXT."
+        )
+
+    def _isMovieDone(self, movie):
+        raise AssertionError(
+            "Unblur output publication must not depend on per-movie DONE sidecars."
+        )
+
+    def _updateOutputSets(self, newDone, streamMode):
+        self.publishedMovieIds.extend(movie.getObjId() for movie in newDone)
+
+    def _getFirstJoinStep(self):
+        return None
+
+    def debug(self, *args, **kwargs):
+        pass
+
+
+class TestCistemUnblurStreamingCompletion(unittest.TestCase):
+    def test_UnblurPublishesFinishedStepWithoutDoneSidecars(self):
+        protocol = _UnblurOutputCheckHarness()
+
+        CistemProtUnblur._checkNewOutput(protocol)
+
+        self.assertEqual([1], protocol.publishedMovieIds)
+
+
+class _UnblurNoDoneProcessingHarness:
+    def __init__(self):
+        self.convertCIStep = []
+
+    def _getOutputMovieFolder(self, movie):
+        return "/tmp"
+
+    def _getMovieDone(self, movie):
+        raise AssertionError(
+            "Unblur processing must not depend on per-movie DONE sidecars."
+        )
+
+    def _filterMovie(self, movie):
+        return False
+
+
+class TestCistemUnblurStreamingProcessing(unittest.TestCase):
+    def test_UnblurProcessingDoesNotUsePerMovieDoneSidecars(self):
+        from pwem.objects import Movie
+
+        movie = Movie()
+        movie.setObjId(1)
+        movie.setFileName("/tmp/movie_001.mrc")
+        movieDict = movie.getObjDict(includeBasic=True)
+
+        protocol = _UnblurNoDoneProcessingHarness()
+
+        CistemProtUnblur.processMovieStep(protocol, movieDict, False)
+
+
+class _UnblurCorrectionMovies:
+    def __init__(self):
+        self.gain = None
+        self.dark = None
+
+    def getGain(self):
+        return self.gain
+
+    def setGain(self, gain):
+        self.gain = gain
+
+    def getDark(self):
+        return self.dark
+
+    def setDark(self, dark):
+        self.dark = dark
+
+
+class _UnblurInitialStepHarness:
+    def __init__(self):
+        self.convertCIStep = []
+        self.inputMovies = _UnblurPointer(_UnblurCorrectionMovies())
+
+    def _getExtraPath(self, *parts):
+        if parts and parts[0] == "DONE":
+            raise AssertionError(
+                "Unblur streaming must not create a DONE directory."
+            )
+        return "/tmp/" + "/".join(parts)
+
+    def _ProtProcessMovies__convertCorrectionImage(self, correctionImage):
+        return correctionImage
+
+
+class TestCistemUnblurStreamingInitialization(unittest.TestCase):
+    def test_UnblurInitialConversionDoesNotCreateDoneDirectory(self):
+        protocol = _UnblurInitialStepHarness()
+
+        CistemProtUnblur._convertInputStep(protocol)
+
+
+class _UnblurGeneratorMovies:
+    def getSamplingRate(self):
+        return 1.5
+
+
+class _UnblurGeneratorHarness:
+    def __init__(self):
+        self.inputMovies = _UnblurPointer(_UnblurGeneratorMovies())
+        self.insertedFunctions = []
+        self.finalDeps = None
+
+    def _insertFunctionStep(self, funcName, *args, **kwargs):
+        stepId = len(self.insertedFunctions) + 1
+        self.insertedFunctions.append((funcName, args, kwargs, stepId))
+        return stepId
+
+    def _insertNewMoviesSteps(self, *args, **kwargs):
+        raise AssertionError(
+            "Unblur _insertAllSteps must not expand the current movie snapshot."
+        )
+
+    def _insertFinalSteps(self, deps):
+        self.finalDeps = list(deps)
+        return list(deps)
+
+
+class TestCistemUnblurStreamingGenerator(unittest.TestCase):
+    def test_UnblurUsesGeneratorAfterInitialConversion(self):
+        protocol = _UnblurGeneratorHarness()
+
+        CistemProtUnblur._insertAllSteps(protocol)
+
+        names = [entry[0] for entry in protocol.insertedFunctions]
+        self.assertIn("_convertInputStep", names)
+        self.assertIn("resumableStepGeneratorStep", names)
+        self.assertIn("createOutputStep", names)
+
+        convertCall = next(entry for entry in protocol.insertedFunctions
+                           if entry[0] == "_convertInputStep")
+        generatorCall = next(entry for entry in protocol.insertedFunctions
+                             if entry[0] == "resumableStepGeneratorStep")
+
+        self.assertEqual([convertCall[3]], generatorCall[2].get("prerequisites"))
+        self.assertEqual([generatorCall[3]], protocol.finalDeps)
+
+
+class _PendingMovieStep:
+    funcName = "processMovieStep"
+    argsStr = '[{"object.id": 2}, false]'
+
+    def isFinished(self):
+        return False
+
+
+class _FinishedResumeMovieStep:
+    funcName = "processMovieStep"
+    argsStr = '[{"object.id": 3}, false]'
+
+    def isFinished(self):
+        return True
+
+
+class _UnblurResumeStateHarness:
+    def __init__(self):
+        self.insertedDict = {}
+        self._steps = [
+            _PendingMovieStep(),
+            _FinishedResumeMovieStep(),
+        ]
+        self.outputMicrographs = _LogicalMovieSet([
+            _LogicalMovie(1),
+        ], streamClosed=False)
+
+    def _getPublishedMovieIds(self):
+        return CistemProtUnblur._getPublishedMovieIds(self)
+
+    def _getScheduledMovieIds(self):
+        return CistemProtUnblur._getScheduledMovieIds(self)
+
+
+class TestCistemUnblurStreamingResumeState(unittest.TestCase):
+    def test_UnblurRestoresPublishedAndScheduledMoviesBeforeDiscovery(self):
+        protocol = _UnblurResumeStateHarness()
+
+        CistemProtUnblur._restoreProcessedMoviesFromPersistentState(protocol)
+
+        self.assertEqual({1, 2, 3}, set(protocol.insertedDict))
+
+
+class _UnblurThreadParam:
+    def __init__(self, value):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+
+class _UnblurThreadValidationHarness:
+    def __init__(self, threads):
+        self.numberOfThreads = _UnblurThreadParam(threads)
+
+
+class TestCistemUnblurStreamingThreadValidation(unittest.TestCase):
+    def test_UnblurGeneratorRejectsOneExecutionWorker(self):
+        protocol = _UnblurThreadValidationHarness(2)
+
+        errors = CistemProtUnblur._validateStreamingThreads(protocol)
+
+        self.assertTrue(errors)
+
+    def test_UnblurGeneratorAcceptsTwoExecutionWorkers(self):
+        protocol = _UnblurThreadValidationHarness(3)
+
+        errors = CistemProtUnblur._validateStreamingThreads(protocol)
+
+        self.assertEqual([], errors)
+
+
+class _UnblurFailedSidecarHarness:
+    def _getAllFailed(self):
+        raise AssertionError(
+            "Unblur streaming failure state must not depend on a failed sidecar."
+        )
+
+
+class TestCistemUnblurStreamingFailurePersistence(unittest.TestCase):
+    def test_UnblurDoesNotWriteFailedMovieSidecar(self):
+        protocol = _UnblurFailedSidecarHarness()
+
+        CistemProtUnblur._writeFailedList(protocol, [_LogicalMovie(1)])
+
+
+class _UnblurArgFailureHarness:
+    def __init__(self):
+        self.errors = []
+
+    def getInputMovies(self):
+        return object()
+
+    def _createTifLink(self, movie):
+        pass
+
+    def _argsUnblur(self, movie):
+        raise RuntimeError("argument preparation failed")
+
+    def _getMovieFn(self, movie):
+        return movie.getFileName()
+
+    def _getErrorFromUnblurTxt(self, movie, error):
+        return str(error)
+
+    def error(self, message):
+        self.errors.append(message)
+
+
+class TestCistemUnblurFailureIsolation(unittest.TestCase):
+    def test_UnblurArgBuildingFailureIsToleratedInsteadOfCrashingProtocol(self):
+        from pwem.objects import Movie
+
+        movie = Movie()
+        movie.setObjId(1)
+        movie.setFileName("/tmp/movie_001.mrc")
+
+        protocol = _UnblurArgFailureHarness()
+
+        CistemProtUnblur._processMovie(protocol, movie)
+
+        self.assertEqual(1, len(protocol.errors))
+        self.assertIn("argument preparation failed", protocol.errors[0])
+
+
+class _UnblurMissingShiftsHarness:
+    def _getShiftsFn(self, movie):
+        return "/tmp/definitely_missing_unblur_shifts.txt"
+
+
+class TestCistemUnblurMissingShiftsFailure(unittest.TestCase):
+    def test_UnblurFailureWithoutShiftsFileIsStillTolerated(self):
+        from pwem.objects import Movie
+
+        movie = Movie()
+        movie.setObjId(1)
+        movie.setFileName("/tmp/movie_001.mrc")
+        protocol = _UnblurMissingShiftsHarness()
+        originalError = RuntimeError("unblur failed before shifts were written")
+
+        message = CistemProtUnblur._getErrorFromUnblurTxt(
+            protocol,
+            movie,
+            originalError,
+        )
+
+        self.assertIs(message, originalError)
 
