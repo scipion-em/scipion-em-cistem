@@ -24,7 +24,6 @@
 # *
 # **************************************************************************
 
-import json
 import os
 import time
 from collections import OrderedDict
@@ -33,10 +32,10 @@ from datetime import datetime
 import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.constants import PROD
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
+import pwem.objects as emobj
 from pwem.constants import RELATION_CTF
 from pwem.protocols import ProtParticlePickingAuto
 from pwem import emlib
@@ -44,9 +43,12 @@ from pwem import emlib
 from cistem import Plugin
 from ..convert import readSetOfCoordinates, writeReferences
 from ..constants import LOW_VARIANCE, FIND_PARTICLES_BIN
+from .protocol_streaming_base import CistemStreamingBase
+
+PICKING_STEP_NAMES = ('pickMicrographStep', 'pickMicrographListStep')
 
 
-class CistemProtFindParticles(ProtParticlePickingAuto):
+class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
     """ Protocol to pick particles (ab-initio or reference-based) using cisTEM. """
     _label = 'find particles'
     _devStatus = PROD
@@ -190,6 +192,13 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
     def stepsGeneratorStep(self):
         """Discover, pick and publish micrographs incrementally."""
         self.micDict = OrderedDict()
+        self._pendingMics = OrderedDict()
+        self._micsWithoutCtf = OrderedDict()
+        self._ctfByMicName = {}
+        self._knownMicIds = set()
+        self._knownCtfIds = set()
+        self._lastMicId = 0
+        self._lastCtfId = 0
         self.streamClosed = False
         self.finished = False
         self.initialIds = self._insertInitialSteps()
@@ -226,172 +235,155 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
     def _doNothing(self, *args):
         pass  # used to avoid some streaming functions
 
-    def _loadSet(self, inputSet, SetClass, getKeyFunc):
-        """Load new items from the logical Set, independently of storage."""
-        self.debug("Loading logical input set.")
-        inputSet.loadAllProperties()
+    def _loadSet(self, inputSet, SetClass, getKeyFunc, watermarkAttr,
+                 knownIds):
+        """Discover the items added to one input stream since the last poll.
+
+        Only ids above that stream's watermark are queried and only those
+        items are hydrated, so polling costs what just arrived rather than
+        everything the stream has produced so far.
+        """
+        self.debug("Discovering new items from the logical input set.")
+
+        newItems, producerClosed, terminalConsistent = (
+            self._discoverNewInputItems(inputSet, watermarkAttr, knownIds))
 
         newItemDict = OrderedDict()
-        for item in inputSet.iterItems():
-            micKey = getKeyFunc(item)
-            if micKey not in self.micDict:
-                newItemDict[micKey] = item.clone()
 
-        streamClosed = inputSet.isStreamClosed()
-        return newItemDict, streamClosed
+        for item in newItems:
+            itemId = item.getObjId()
+
+            if itemId in knownIds:
+                continue
+
+            knownIds.add(itemId)
+            newItemDict[getKeyFunc(item)] = item
+
+        return newItemDict, producerClosed and terminalConsistent
+
+    def _loadMics(self, micSet):
+        return self._loadSet(micSet, emobj.SetOfMicrographs,
+                             lambda mic: mic.getMicName(),
+                             '_lastMicId', self._knownMicIds)
+
+    def _loadCTFs(self, ctfSet):
+        return self._loadSet(ctfSet, emobj.SetOfCTF,
+                             lambda ctf: ctf.getMicrograph().getMicName(),
+                             '_lastCtfId', self._knownCtfIds)
 
     def _loadInputList(self):
-        """ This function is re-implemented in this protocol, because it has
-         a SetOfCTF as input, so for streaming, we only want to report the
-         micrographs for which the CTF is ready.
+        """Report the micrographs whose CTF has arrived.
+
+        Both inputs are streams that advance independently, so each keeps
+        its own watermark and whatever has no counterpart yet waits in a
+        pending map. That map is the only thing re-examined per poll - a
+        micrograph is never looked up in the input Set twice.
         """
-        micDict, micClose = self._loadMics(self.getInputMicrographs())
-        ctfDict, ctfClosed = self._loadCTFs(self.ctfRelations.get())
+        gapIds = getattr(self, '_resumeGapIds', None)
 
-        # Keep the micrographs that have CTF
-        # and set the CTF property for those who have it
-        readyMics = dict()
+        if gapIds:
+            micSet = self.getInputMicrographs()
 
-        for micKey, mic in micDict.items():
-            if micKey in ctfDict:
-                mic.setCTF(ctfDict[micKey])
-                readyMics[micKey] = mic
+            for mic in self._loadLogicalSetItemsByIds(micSet, gapIds):
+                self._knownMicIds.add(mic.getObjId())
+                self._micsWithoutCtf[mic.getMicName()] = mic
 
-        # Return the updated micDict and the closed status
-        return readyMics, micClose and ctfClosed
+            self._resumeGapIds = set()
+
+        newMics, micClosed = self._loadMics(self.getInputMicrographs())
+        newCtfs, ctfClosed = self._loadCTFs(self.ctfRelations.get())
+
+        self._micsWithoutCtf.update(newMics)
+
+        for micKey, ctf in newCtfs.items():
+            self._ctfByMicName[micKey] = ctf
+
+        readyMics = OrderedDict()
+
+        for micKey in list(self._micsWithoutCtf):
+            ctf = self._ctfByMicName.pop(micKey, None)
+
+            if ctf is None:
+                continue
+
+            mic = self._micsWithoutCtf.pop(micKey)
+            mic.setCTF(ctf)
+            readyMics[micKey] = mic
+
+        if readyMics:
+            scheduledNames = self._getScheduledPickingMicNames()
+
+            for micKey in list(readyMics):
+                if micKey in scheduledNames:
+                    # Already has a step from an earlier run: it only needs
+                    # publishing, so it must not be scheduled a second time.
+                    self.micDict[micKey] = readyMics.pop(micKey)
+
+        self._pendingMics.update(readyMics)
+
+        return OrderedDict(self._pendingMics), micClosed and ctfClosed
 
     def _checkNewInput(self):
         """Discover ready micrographs directly from logical input Sets."""
         micDict, self.streamClosed = self._loadInputList()
-        newMics = micDict.values()
-        outputStep = self._getFirstJoinStep()
+        newMics = list(micDict.values())
 
         if newMics:
-            dependencies = self._insertNewMicsSteps(newMics)
-            if outputStep is not None:
-                outputStep.addPrerequisites(*dependencies)
+            self._insertNewMicsSteps(newMics)
+
+            # pwem only takes whole batches; whatever it left out has to be
+            # offered again, because discovery will not find it twice.
+            for mic in newMics:
+                if mic.getMicName() in self.micDict:
+                    self._pendingMics.pop(mic.getMicName(), None)
+
             self.updateSteps()
 
     def _getFinishedPickingMicNames(self):
         """Return mic names represented by finished picking steps."""
-        finishedNames = set()
-
-        for step in getattr(self, '_steps', []):
-            if not step.isFinished():
-                continue
-
-            funcName = getattr(step, 'funcName', None)
-            if hasattr(funcName, 'get'):
-                funcName = funcName.get()
-
-            if funcName not in ('pickMicrographStep', 'pickMicrographListStep'):
-                continue
-
-            argsStr = getattr(step, 'argsStr', None)
-            if hasattr(argsStr, 'get'):
-                argsStr = argsStr.get('[]')
-
-            try:
-                args = json.loads(argsStr or '[]')
-            except (TypeError, ValueError):
-                continue
-
-            if not args:
-                continue
-
-            if funcName == 'pickMicrographStep':
-                if isinstance(args[0], str):
-                    finishedNames.add(args[0])
-            elif isinstance(args[0], list):
-                finishedNames.update(
-                    micName for micName in args[0]
-                    if isinstance(micName, str)
-                )
-
-        return finishedNames
+        return self._collectStepArgKeys(PICKING_STEP_NAMES, keyType=str)
 
     def _getScheduledPickingMicNames(self):
         """Return mic names represented by persisted picking steps."""
-        scheduledNames = set()
-
-        for step in getattr(self, '_steps', []):
-            funcName = getattr(step, 'funcName', None)
-            if hasattr(funcName, 'get'):
-                funcName = funcName.get()
-
-            if funcName not in ('pickMicrographStep', 'pickMicrographListStep'):
-                continue
-
-            argsStr = getattr(step, 'argsStr', None)
-            if hasattr(argsStr, 'get'):
-                argsStr = argsStr.get('[]')
-
-            try:
-                args = json.loads(argsStr or '[]')
-            except (TypeError, ValueError):
-                continue
-
-            if not args:
-                continue
-
-            if funcName == 'pickMicrographStep':
-                if isinstance(args[0], str):
-                    scheduledNames.add(args[0])
-            elif isinstance(args[0], list):
-                scheduledNames.update(
-                    micName for micName in args[0]
-                    if isinstance(micName, str)
-                )
-
-        return scheduledNames
+        return self._collectStepArgKeys(PICKING_STEP_NAMES,
+                                        onlyFinished=False, keyType=str)
 
     def _restoreProcessedMicsFromPersistentState(self):
-        """Restore published and already scheduled inputs before discovery."""
-        processedNames = (
-            self._getPublishedPickingMicNames()
-            | self._getScheduledPickingMicNames()
-        )
+        """Place the watermarks past what a previous run already handled.
 
-        if not processedNames:
+        Coordinates carry the id of their micrograph, so the output Set
+        says which micrographs were picked, and the step graph covers the
+        ones that produced no coordinate at all. Discovery restarts above
+        that, and anything below it that was never handled comes back as a
+        gap rather than being walked for again on every poll.
+        """
+        self._lastMicId = getattr(self, '_lastMicId', 0)
+
+        pickedMicIds = self._getPublishedPickingMicIds()
+
+        if not pickedMicIds:
             return
 
-        inputMics = self.getInputMicrographs()
-        inputMics.loadAllProperties()
+        watermark, gapIds = self._resumeWatermarkWithGaps(
+            self.getInputMicrographs(), pickedMicIds)
 
-        for mic in inputMics.iterItems():
-            micName = mic.getMicName()
-            if micName in processedNames:
-                self.micDict[micName] = mic.clone()
+        self._lastMicId = max(self._lastMicId, watermark)
+        self._knownMicIds.update(pickedMicIds)
+        self._resumeGapIds = gapIds
 
-    def _getPublishedPickingMicNames(self):
-        published = getattr(self, '_publishedPickingMicNames', None)
-        if published is None:
+    def _getPublishedPickingMicIds(self):
+        """Micrograph ids already represented in the output coordinates.
+
+        This is an id query on the output, not a walk over it, and it only
+        runs once per execution.
+        """
+        micIds = self._getOutputUniqueValues(
+            getattr(self, 'outputCoordinates', None), '_micId')
+
+        if micIds is None:
             return set()
 
-        value = published.get()
-        if not value:
-            return set()
-
-        try:
-            names = json.loads(value)
-        except (TypeError, ValueError):
-            return set()
-
-        return set(names) if isinstance(names, list) else set()
-
-    def _markPublishedPickingMics(self, micList):
-        publishedNames = self._getPublishedPickingMicNames()
-        publishedNames.update(mic.getMicName() for mic in micList)
-
-        value = json.dumps(sorted(publishedNames))
-        published = getattr(self, '_publishedPickingMicNames', None)
-
-        if published is None:
-            self._publishedPickingMicNames = pwobj.String(value)
-        else:
-            published.set(value)
-
-        self._store()
+        return micIds
 
     def _checkNewOutput(self):
         """Publish finished picking steps without DONE sidecars."""
@@ -399,30 +391,32 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             return
 
         finishedNames = self._getFinishedPickingMicNames()
-        publishedNames = self._getPublishedPickingMicNames()
+
+        # micDict holds what has been scheduled and not published yet, so
+        # only that has to be looked at - never every micrograph seen.
         newDone = [
-            mic for mic in self.micDict.values()
-            if mic.getMicName() in finishedNames
-            and mic.getMicName() not in publishedNames
+            mic for micName, mic in self.micDict.items()
+            if micName in finishedNames
         ]
 
-        allMicNames = set(self.micDict)
-        self.finished = self.streamClosed and allMicNames.issubset(finishedNames)
+        allDone = (len(newDone) == len(self.micDict)
+                   and not self._pendingMics
+                   and not self._micsWithoutCtf)
+        self.finished = self.streamClosed and allDone
         streamMode = pwobj.Set.STREAM_CLOSED if self.finished else pwobj.Set.STREAM_OPEN
 
         if newDone:
-            publishedMics = self._updateOutputCoordSet(newDone, streamMode)
-            self._markPublishedPickingMics(publishedMics)
+            self._updateOutputCoordSet(newDone, streamMode)
+
+            for mic in newDone:
+                self.micDict.pop(mic.getMicName(), None)
         elif not self.finished:
-            if allMicNames.issubset(finishedNames):
+            if allDone:
                 self._streamingSleepOnWait()
             return
 
         if self.finished:
             self._updateStreamState(streamMode)
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self, micsId, refsId):

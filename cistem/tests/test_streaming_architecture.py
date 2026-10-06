@@ -5,12 +5,16 @@
 # **************************************************************************
 
 import unittest
+from collections import OrderedDict
 
 from cistem.protocols.protocol_ctffind import (
     CistemProtCTFFind,
 )
 from cistem.protocols.protocol_unblur import CistemProtUnblur
 from cistem.protocols.protocol_picking import CistemProtFindParticles
+from cistem.protocols.protocol_streaming_base import CistemStreamingBase
+
+from .logical_set_fakes import LogicalSetFake
 
 
 class _Mic:
@@ -27,6 +31,12 @@ class _Mic:
     def getFileName(self):
         return self._micName
 
+    def setCTF(self, ctf):
+        self._ctf = ctf
+
+    def getCTF(self):
+        return getattr(self, '_ctf', None)
+
     def clone(self):
         return _Mic(
             self._objId,
@@ -34,36 +44,27 @@ class _Mic:
         )
 
 
-class _LogicalMicrographSet:
-    def __init__(self, items, streamClosed=False):
-        self._items = list(items)
-        self._streamClosed = streamClosed
-        self.loadCalls = 0
-
-    def getFileName(self):
-        raise AssertionError(
-            "Streaming discovery must not depend on "
-            "a SQLite/storage filename."
-        )
-
-    def loadAllProperties(self):
-        self.loadCalls += 1
-
-    def iterItems(self):
-        return iter(self._items)
-
-    def isStreamClosed(self):
-        return self._streamClosed
+class _LogicalMicrographSet(LogicalSetFake):
+    pass
 
 
-class _CtffindStreamingHarness:
+class _CtffindStreamingHarness(CistemStreamingBase):
     def __init__(self, inputSet):
         self._inputSet = inputSet
         self.micDict = {}
+        self._pendingMics = OrderedDict()
+        self._knownMicIds = set()
+        self._lastInputId = 0
         self.debugMessages = []
 
     def getInputMicrographs(self):
         return self._inputSet
+
+    def _getFinishedCtfMicNames(self):
+        return CistemProtCTFFind._getFinishedCtfMicNames(self)
+
+    def _getScheduledCtfMicNames(self):
+        return CistemProtCTFFind._getScheduledCtfMicNames(self)
 
     def debug(self, message):
         self.debugMessages.append(message)
@@ -125,15 +126,22 @@ class TestCistemCtffindStreamingArchitecture(
         )
 
 
-class _JoinStep:
-    def __init__(self):
-        self.prerequisites = []
+class _NoJoinStepGuard:
+    """Fail loudly if a protocol goes back to the legacy join-step pattern.
 
-    def addPrerequisites(self, *deps):
-        self.prerequisites.extend(deps)
+    Streaming protocols must not create a WAITING output step that the
+    generator unlocks with setStatus(STATUS_NEW); the generator inserts its
+    own final step once the stream is exhausted.
+    """
+
+    def _getFirstJoinStep(self):
+        raise AssertionError(
+            "Streaming must not depend on a waiting join step."
+        )
 
 
 class _CtffindInputCheckHarness(
+        _NoJoinStepGuard,
         _CtffindStreamingHarness
 ):
     def __init__(self, inputSet):
@@ -141,7 +149,6 @@ class _CtffindInputCheckHarness(
             inputSet
         )
         self.streamClosed = False
-        self.joinStep = _JoinStep()
         self.insertedMicNames = []
         self.updateStepsCalls = 0
 
@@ -170,9 +177,6 @@ class _CtffindInputCheckHarness(
                 newMics
             )
         ]
-
-    def _getFirstJoinStep(self):
-        return self.joinStep
 
     def updateSteps(self):
         self.updateStepsCalls += 1
@@ -211,14 +215,6 @@ class TestCistemCtffindStreamingInputChecks(
         )
 
         self.assertEqual(
-            protocol.joinStep.prerequisites,
-            [
-                101,
-                102,
-            ],
-        )
-
-        self.assertEqual(
             protocol.updateStepsCalls,
             1,
         )
@@ -251,16 +247,17 @@ class _FinishedCtfStep:
         return True
 
 
-class _CtffindOutputCheckHarness:
+class _CtffindOutputCheckHarness(CistemStreamingBase):
     def __init__(self):
         mic = _Mic(
             1,
             "mic_001",
         )
 
-        self.micDict = {
-            mic.getMicName(): mic,
-        }
+        self.micDict = OrderedDict(
+            [(mic.getMicName(), mic)]
+        )
+        self._pendingMics = OrderedDict()
         self.streamClosed = False
         self.finished = False
         self._steps = [
@@ -283,11 +280,6 @@ class _CtffindOutputCheckHarness:
         raise AssertionError(
             "CTFFind streaming output must not depend on "
             "DONE/mic_*.TXT."
-        )
-
-    def _getPublishedCtfMicNames(self):
-        return set(
-            self.publishedMicNames
         )
 
     def _getFinishedCtfMicNames(self):
@@ -321,9 +313,6 @@ class _CtffindOutputCheckHarness:
         )
 
         return micList
-
-    def _getFirstJoinStep(self):
-        return None
 
     def _streamingSleepOnWait(self):
         self.sleepCalls += 1
@@ -515,9 +504,6 @@ class _CtffindInsertHarness:
         self.legacyFinalCalls += 1
         return deps
 
-    def _getFirstJoinStepName(self):
-        return "createOutputStep"
-
     def _insertFunctionStep(
             self,
             funcName,
@@ -587,19 +573,19 @@ class _PublishedCtf:
     def __init__(self, mic):
         self._mic = mic
 
+    def getObjId(self):
+        return self._mic.getObjId()
+
     def getMicrograph(self):
         return self._mic
 
 
-class _LogicalCtfOutput:
+class _LogicalCtfOutput(LogicalSetFake):
     def __init__(self, ctfs):
-        self._ctfs = list(ctfs)
-
-    def iterItems(self):
-        return iter(self._ctfs)
+        super().__init__(ctfs, streamClosed=False)
 
 
-class _CtffindResumeHarness:
+class _CtffindResumeHarness(CistemStreamingBase):
     def _insertInitialSteps(self):
         return []
 
@@ -628,18 +614,18 @@ class _CtffindResumeHarness:
     def _defineCtfParamsDict(self):
         pass
 
-    def _getPublishedCtfMicNames(self):
-        return (
-            CistemProtCTFFind
-            ._getPublishedCtfMicNames(
-                self
-            )
-        )
-
     def _getFinishedCtfMicNames(self):
         return (
             CistemProtCTFFind
             ._getFinishedCtfMicNames(
+                self
+            )
+        )
+
+    def _getScheduledCtfMicNames(self):
+        return (
+            CistemProtCTFFind
+            ._getScheduledCtfMicNames(
                 self
             )
         )
@@ -677,9 +663,6 @@ class _CtffindResumeHarness:
                 self
             )
         )
-
-    def _getFirstJoinStep(self):
-        return None
 
     def _insertNewMicsSteps(
             self,
@@ -837,7 +820,7 @@ class _CtffindResumePublishHarness(
     ):
         pass
 
-    def _getPublishedCtfMicNames(self):
+    def _publishedMicNamesSoFar(self):
         published = set()
 
         for batch in self.publishCalls:
@@ -965,33 +948,20 @@ class _LogicalMovie:
         return _LogicalMovie(self.objId)
 
 
-class _LogicalMovieSet:
+class _LogicalMovieSet(LogicalSetFake):
     def __init__(self, movies, streamClosed=True):
-        self.movies = list(movies)
-        self.streamClosed = streamClosed
-        self.reloads = 0
-
-    def getFileName(self):
-        raise AssertionError(
-            "Unblur streaming discovery must not depend on a SQLite/storage filename."
-        )
-
-    def loadAllProperties(self):
-        self.reloads += 1
-
-    def iterItems(self):
-        return iter(self.movies)
-
-    def __iter__(self):
-        return self.iterItems()
-
-    def isStreamClosed(self):
-        return self.streamClosed
+        super().__init__(movies, streamClosed=streamClosed)
 
 
-class _UnblurLogicalInputHarness:
+class _UnblurLogicalInputHarness(CistemStreamingBase):
     def __init__(self, movieSet):
         self.inputMovies = _UnblurPointer(movieSet)
+        self.listOfMovies = []
+        self.streamClosed = False
+        self._lastInputId = 0
+        self._knownMovieIds = set()
+        self._pendingMovies = {}
+        self._discoveredMovieCount = 0
 
     def debug(self, *args, **kwargs):
         pass
@@ -1012,23 +982,25 @@ class TestCistemUnblurStreamingArchitecture(unittest.TestCase):
         self.assertGreaterEqual(movieSet.reloads, 1)
 
 
-class _UnblurInputCheckHarness:
+class _UnblurInputCheckHarness(_NoJoinStepGuard, CistemStreamingBase):
     def __init__(self, movieSet):
         self.inputMovies = _UnblurPointer(movieSet)
         self.insertedDict = {}
         self.listOfMovies = []
+        self.newDeps = []
         self.streamClosed = False
         self.insertedMovieIds = []
         self.updateCalls = 0
+        self._lastInputId = 0
+        self._knownMovieIds = set()
+        self._pendingMovies = {}
+        self._discoveredMovieCount = 0
 
     def debug(self, *args, **kwargs):
         pass
 
     def _loadInputList(self):
         return CistemProtUnblur._loadInputList(self)
-
-    def _getFirstJoinStep(self):
-        return None
 
     def _insertNewMoviesSteps(self, insertedDict, inputMovies):
         deps = []
@@ -1069,7 +1041,7 @@ class _FinishedMovieStep:
         return True
 
 
-class _UnblurOutputCheckHarness:
+class _UnblurOutputCheckHarness(CistemStreamingBase):
 
     def _getPublishedMovieIds(self):
         return CistemProtUnblur._getPublishedMovieIds(self)
@@ -1078,7 +1050,10 @@ class _UnblurOutputCheckHarness:
         return CistemProtUnblur._getFinishedMovieIds(self)
 
     def __init__(self):
-        self.listOfMovies = [_LogicalMovie(1)]
+        movie = _LogicalMovie(1)
+        self.listOfMovies = [movie]
+        self._pendingMovies = {1: movie}
+        self._publishedAnyOutput = False
         self.streamClosed = False
         self.finished = False
         self._steps = [_FinishedMovieStep()]
@@ -1096,9 +1071,6 @@ class _UnblurOutputCheckHarness:
 
     def _updateOutputSets(self, newDone, streamMode):
         self.publishedMovieIds.extend(movie.getObjId() for movie in newDone)
-
-    def _getFirstJoinStep(self):
-        return None
 
     def debug(self, *args, **kwargs):
         pass
@@ -1210,6 +1182,22 @@ class _UnblurGeneratorHarness:
         return list(deps)
 
 
+class _UnblurGeneratorLoopHarness(_UnblurGeneratorHarness):
+    """Run one generator iteration that already exhausts the input stream."""
+
+    def _restoreProcessedMoviesFromPersistentState(self):
+        pass
+
+    def _checkNewInput(self):
+        self.newDeps.extend([11, 12])
+
+    def _checkNewOutput(self):
+        self.finished = True
+
+    def _getStreamingSleepOnWait(self):
+        raise AssertionError("The generator must not sleep once it finished.")
+
+
 class TestCistemUnblurStreamingGenerator(unittest.TestCase):
     def test_UnblurUsesGeneratorAfterInitialConversion(self):
         protocol = _UnblurGeneratorHarness()
@@ -1217,9 +1205,8 @@ class TestCistemUnblurStreamingGenerator(unittest.TestCase):
         CistemProtUnblur._insertAllSteps(protocol)
 
         names = [entry[0] for entry in protocol.insertedFunctions]
-        self.assertIn("_convertInputStep", names)
-        self.assertIn("resumableStepGeneratorStep", names)
-        self.assertIn("createOutputStep", names)
+        self.assertEqual(["_convertInputStep", "resumableStepGeneratorStep"],
+                         names)
 
         convertCall = next(entry for entry in protocol.insertedFunctions
                            if entry[0] == "_convertInputStep")
@@ -1227,7 +1214,22 @@ class TestCistemUnblurStreamingGenerator(unittest.TestCase):
                              if entry[0] == "resumableStepGeneratorStep")
 
         self.assertEqual([convertCall[3]], generatorCall[2].get("prerequisites"))
-        self.assertEqual([generatorCall[3]], protocol.finalDeps)
+        # The output step is NOT scheduled upfront with wait=True any more:
+        # the generator inserts it once the input stream is exhausted.
+        self.assertIsNone(protocol.finalDeps)
+
+    def test_UnblurGeneratorSchedulesOutputStepOnceStreamIsExhausted(self):
+        protocol = _UnblurGeneratorLoopHarness()
+
+        CistemProtUnblur.stepsGeneratorStep(protocol)
+
+        names = [entry[0] for entry in protocol.insertedFunctions]
+        self.assertEqual(["createOutputStep"], names)
+
+        outputCall = protocol.insertedFunctions[0]
+        self.assertEqual([11, 12], outputCall[2].get("prerequisites"))
+        self.assertNotIn("wait", outputCall[2])
+        self.assertEqual([11, 12], protocol.finalDeps)
 
 
 class _PendingMovieStep:
@@ -1246,7 +1248,7 @@ class _FinishedResumeMovieStep:
         return True
 
 
-class _UnblurResumeStateHarness:
+class _UnblurResumeStateHarness(CistemStreamingBase):
     def __init__(self):
         self.insertedDict = {}
         self._steps = [
@@ -1256,6 +1258,11 @@ class _UnblurResumeStateHarness:
         self.outputMicrographs = _LogicalMovieSet([
             _LogicalMovie(1),
         ], streamClosed=False)
+        self.inputMovies = _UnblurPointer(_LogicalMovieSet([
+            _LogicalMovie(1),
+            _LogicalMovie(2),
+            _LogicalMovie(3),
+        ], streamClosed=False))
 
     def _getPublishedMovieIds(self):
         return CistemProtUnblur._getPublishedMovieIds(self)
@@ -1273,7 +1280,7 @@ class TestCistemUnblurStreamingResumeState(unittest.TestCase):
         self.assertEqual({1, 2, 3}, set(protocol.insertedDict))
 
 
-class _UnblurThreadParam:
+class _ThreadParam:
     def __init__(self, value):
         self.value = value
 
@@ -1281,21 +1288,21 @@ class _UnblurThreadParam:
         return self.value
 
 
-class _UnblurThreadValidationHarness:
+class _ThreadValidationHarness:
     def __init__(self, threads):
-        self.numberOfThreads = _UnblurThreadParam(threads)
+        self.numberOfThreads = _ThreadParam(threads)
 
 
 class TestCistemUnblurStreamingThreadValidation(unittest.TestCase):
     def test_UnblurGeneratorRejectsOneExecutionWorker(self):
-        protocol = _UnblurThreadValidationHarness(2)
+        protocol = _ThreadValidationHarness(2)
 
         errors = CistemProtUnblur._validateStreamingThreads(protocol)
 
         self.assertTrue(errors)
 
     def test_UnblurGeneratorAcceptsTwoExecutionWorkers(self):
-        protocol = _UnblurThreadValidationHarness(3)
+        protocol = _ThreadValidationHarness(3)
 
         errors = CistemProtUnblur._validateStreamingThreads(protocol)
 
@@ -1386,11 +1393,10 @@ class _FindParticlesInputSetGuard:
         )
 
 
-class _FindParticlesInputCheckHarness:
+class _FindParticlesInputCheckHarness(_NoJoinStepGuard):
     def __init__(self):
         self.streamClosed = False
         self.micDict = {}
-        self.joinStep = _JoinStep()
         self.insertedMicNames = []
         self.updateStepsCalls = 0
         self.readyMic = _Mic(1, "mic_001")
@@ -1407,9 +1413,6 @@ class _FindParticlesInputCheckHarness:
         self.insertedMicNames.extend(mic.getMicName() for mic in newMics)
         return [101 + index for index, _ in enumerate(newMics)]
 
-    def _getFirstJoinStep(self):
-        return self.joinStep
-
     def updateSteps(self):
         self.updateStepsCalls += 1
 
@@ -1421,7 +1424,6 @@ class TestCistemFindParticlesStreamingInputChecks(unittest.TestCase):
         CistemProtFindParticles._checkNewInput(protocol)
 
         self.assertEqual(["mic_001"], protocol.insertedMicNames)
-        self.assertEqual([101], protocol.joinStep.prerequisites)
         self.assertEqual(1, protocol.updateStepsCalls)
         self.assertFalse(protocol.streamClosed)
 
@@ -1440,7 +1442,7 @@ class _PendingPickingStep(_FinishedPickingStep):
         return False
 
 
-class _FindParticlesFinishedStepsHarness:
+class _FindParticlesFinishedStepsHarness(CistemStreamingBase):
     def __init__(self):
         self._steps = [
             _FinishedPickingStep(
@@ -1470,10 +1472,12 @@ class TestCistemFindParticlesFinishedStepState(unittest.TestCase):
         )
 
 
-class _FindParticlesOutputCheckHarness:
+class _FindParticlesOutputCheckHarness(CistemStreamingBase):
     def __init__(self):
         mic = _Mic(1, "mic_001")
-        self.micDict = {mic.getMicName(): mic}
+        self.micDict = OrderedDict([(mic.getMicName(), mic)])
+        self._pendingMics = OrderedDict()
+        self._micsWithoutCtf = OrderedDict()
         self.streamClosed = False
         self.finished = False
         self._steps = [
@@ -1499,19 +1503,11 @@ class _FindParticlesOutputCheckHarness:
     def _getFinishedPickingMicNames(self):
         return CistemProtFindParticles._getFinishedPickingMicNames(self)
 
-    def _getPublishedPickingMicNames(self):
-        return set(self.publishedMicNames)
-
-    def _markPublishedPickingMics(self, micList):
-        self.publishedMicNames.update(mic.getMicName() for mic in micList)
-
     def _updateOutputCoordSet(self, micList, streamMode):
         micList = list(micList)
         self.publishCalls.append([mic.getMicName() for mic in micList])
+        self.publishedMicNames.update(mic.getMicName() for mic in micList)
         return micList
-
-    def _getFirstJoinStep(self):
-        return None
 
     def _streamingSleepOnWait(self):
         self.sleepCalls += 1
@@ -1537,35 +1533,85 @@ class TestCistemFindParticlesStreamingCompletion(unittest.TestCase):
         )
 
 
-class _FindParticlesPublishedStateHarness:
-    def __init__(self, persistedValue=None):
-        self.storeCalls = 0
-        if persistedValue is not None:
-            self._publishedPickingMicNames = _StoredValue(persistedValue)
+class _FindParticlesEmptyCoordHarness(CistemStreamingBase):
+    """A micrograph that was picked but yielded no coordinate at all."""
 
-    def _getPublishedPickingMicNames(self):
-        return CistemProtFindParticles._getPublishedPickingMicNames(self)
+    def __init__(self):
+        self.micDict = OrderedDict()
+        self._pendingMics = OrderedDict()
+        self._micsWithoutCtf = OrderedDict()
+        self._ctfByMicName = {}
+        self._knownMicIds = set()
+        self._knownCtfIds = set()
+        self._lastMicId = 0
+        self._lastCtfId = 0
+        self.streamClosed = False
+        self.scheduledMicNames = []
+        self._inputMics = _FindParticlesResumeLogicalSet([
+            _Mic(1, "mic_001"),
+        ])
+        self.ctfRelations = _UnblurPointer(_FindParticlesResumeLogicalSet([
+            _LogicalCtf(_Mic(1, "mic_001")),
+        ]))
+        # It was picked, so its step is in the graph, but it left no row
+        # behind in the output coordinates.
+        self._steps = [
+            _FinishedPickingStep("pickMicrographStep", '["mic_001", {}]'),
+        ]
+        self.outputCoordinates = _LogicalCoordinateOutput([])
 
-    def _store(self):
-        self.storeCalls += 1
+    def getInputMicrographs(self):
+        return self._inputMics
+
+    def _getPublishedPickingMicIds(self):
+        return CistemProtFindParticles._getPublishedPickingMicIds(self)
+
+    def _getScheduledPickingMicNames(self):
+        return CistemProtFindParticles._getScheduledPickingMicNames(self)
+
+    def _loadInputList(self):
+        return CistemProtFindParticles._loadInputList(self)
+
+    def _loadMics(self, micSet):
+        return CistemProtFindParticles._loadMics(self, micSet)
+
+    def _loadCTFs(self, ctfSet):
+        return CistemProtFindParticles._loadCTFs(self, ctfSet)
+
+    def _loadSet(self, inputSet, SetClass, getKeyFunc, watermarkAttr,
+                 knownIds):
+        return CistemProtFindParticles._loadSet(
+            self, inputSet, SetClass, getKeyFunc, watermarkAttr, knownIds)
+
+    def _insertNewMicsSteps(self, newMics):
+        newMics = list(newMics)
+        self.scheduledMicNames.extend(mic.getMicName() for mic in newMics)
+
+        for mic in newMics:
+            self.micDict[mic.getMicName()] = mic
+
+        return []
+
+    def updateSteps(self):
+        pass
+
+    def debug(self, *args, **kwargs):
+        pass
 
 
 class TestCistemFindParticlesPublishedStatePersistence(unittest.TestCase):
-    def test_FindParticlesPersistsPublishedMicrographWithoutCoordinates(self):
-        mic = _Mic(1, "mic_001")
-        protocol = _FindParticlesPublishedStateHarness()
+    def test_FindParticlesDoesNotRepickMicrographThatYieldedNoCoordinates(self):
+        # The output Set cannot answer this one - a micrograph with zero
+        # coordinates leaves no row - so the step graph has to, which is
+        # why no separate published-name list has to be persisted.
+        protocol = _FindParticlesEmptyCoordHarness()
 
-        CistemProtFindParticles._markPublishedPickingMics(protocol, [mic])
+        CistemProtFindParticles._restoreProcessedMicsFromPersistentState(
+            protocol)
+        CistemProtFindParticles._checkNewInput(protocol)
 
-        self.assertEqual(1, protocol.storeCalls)
-        persistedValue = protocol._publishedPickingMicNames.get()
-
-        reloaded = _FindParticlesPublishedStateHarness(persistedValue)
-
-        self.assertEqual(
-            {"mic_001"},
-            CistemProtFindParticles._getPublishedPickingMicNames(reloaded),
-        )
+        self.assertEqual([], protocol.scheduledMicNames)
+        self.assertEqual({"mic_001"}, set(protocol.micDict))
 
 
 class _FindParticlesNoDoneProcessingHarness:
@@ -1724,24 +1770,60 @@ class _ScheduledPickingStep:
         return self._finished
 
 
-class _FindParticlesResumeLogicalSet:
+class _FindParticlesResumeLogicalSet(LogicalSetFake):
     def __init__(self, items, streamClosed=True):
-        self._items = list(items)
-        self._streamClosed = streamClosed
-
-    def loadAllProperties(self):
-        pass
-
-    def iterItems(self):
-        return iter(self._items)
-
-    def isStreamClosed(self):
-        return self._streamClosed
+        super().__init__(items, streamClosed=streamClosed)
 
 
-class _FindParticlesResumeHarness:
+class _LogicalCtf:
+    def __init__(self, mic):
+        self._mic = mic
+
+    def getObjId(self):
+        return self._mic.getObjId()
+
+    def getMicrograph(self):
+        return self._mic
+
+    def clone(self):
+        return _LogicalCtf(self._mic)
+
+
+class _PublishedCoordinate:
+    """A coordinate only tells which micrograph it came from."""
+
+    def __init__(self, micId):
+        self._micId = micId
+
+    def getObjId(self):
+        return self._micId
+
+    def getMicId(self):
+        return self._micId
+
+
+class _LogicalCoordinateOutput(LogicalSetFake):
+    def __init__(self, micIds):
+        super().__init__([_PublishedCoordinate(micId) for micId in micIds],
+                         streamClosed=False)
+
+    def getUniqueValues(self, attributes, where=None):
+        if attributes == '_micId':
+            return [item.getMicId() for item in self._items]
+
+        return super().getUniqueValues(attributes, where=where)
+
+
+class _FindParticlesResumeHarness(CistemStreamingBase):
     def __init__(self):
-        self.micDict = {}
+        self.micDict = OrderedDict()
+        self._pendingMics = OrderedDict()
+        self._micsWithoutCtf = OrderedDict()
+        self._ctfByMicName = {}
+        self._knownMicIds = set()
+        self._knownCtfIds = set()
+        self._lastMicId = 0
+        self._lastCtfId = 0
         self.streamClosed = False
         self.finished = False
         self.initialIds = []
@@ -1758,15 +1840,20 @@ class _FindParticlesResumeHarness:
                 finished=False,
             ),
         ]
-        self._publishedPickingMicNames = _StoredValue(
-            '["mic_001"]'
-        )
+        # mic_001 was published by a previous run, mic_002 only scheduled.
+        self.outputCoordinates = _LogicalCoordinateOutput([1])
+        # Every micrograph already has its CTF in this scenario.
+        self.ctfRelations = _UnblurPointer(_FindParticlesResumeLogicalSet([
+            _LogicalCtf(_Mic(1, "mic_001")),
+            _LogicalCtf(_Mic(2, "mic_002")),
+            _LogicalCtf(_Mic(3, "mic_003")),
+        ]))
 
     def getInputMicrographs(self):
         return self._inputMics
 
-    def _getPublishedPickingMicNames(self):
-        return CistemProtFindParticles._getPublishedPickingMicNames(self)
+    def _getPublishedPickingMicIds(self):
+        return CistemProtFindParticles._getPublishedPickingMicIds(self)
 
     def _getScheduledPickingMicNames(self):
         return CistemProtFindParticles._getScheduledPickingMicNames(self)
@@ -1775,15 +1862,18 @@ class _FindParticlesResumeHarness:
         return CistemProtFindParticles._restoreProcessedMicsFromPersistentState(self)
 
     def _loadInputList(self):
-        self._inputMics.loadAllProperties()
+        return CistemProtFindParticles._loadInputList(self)
 
-        newMics = {}
-        for mic in self._inputMics.iterItems():
-            micName = mic.getMicName()
-            if micName not in self.micDict:
-                newMics[micName] = mic.clone()
+    def _loadMics(self, micSet):
+        return CistemProtFindParticles._loadMics(self, micSet)
 
-        return newMics, self._inputMics.isStreamClosed()
+    def _loadCTFs(self, ctfSet):
+        return CistemProtFindParticles._loadCTFs(self, ctfSet)
+
+    def _loadSet(self, inputSet, SetClass, getKeyFunc, watermarkAttr,
+                 knownIds):
+        return CistemProtFindParticles._loadSet(
+            self, inputSet, SetClass, getKeyFunc, watermarkAttr, knownIds)
 
     def _insertNewMicsSteps(self, newMics):
         newMics = list(newMics)
@@ -1791,9 +1881,6 @@ class _FindParticlesResumeHarness:
         for mic in newMics:
             self.micDict[mic.getMicName()] = mic
         return []
-
-    def _getFirstJoinStep(self):
-        return None
 
     def updateSteps(self):
         pass
@@ -1813,8 +1900,10 @@ class TestCistemFindParticlesGeneratorResumeSafety(unittest.TestCase):
             ["mic_003"],
             protocol.scheduledMicNames,
         )
+        # micDict now holds only what still has to be published, so the
+        # micrograph a previous run already published stays out of it.
         self.assertEqual(
-            {"mic_001", "mic_002", "mic_003"},
+            {"mic_002", "mic_003"},
             set(protocol.micDict),
         )
 
@@ -1875,3 +1964,223 @@ class TestCistemFindParticlesStreamingThreadValidation(unittest.TestCase):
 
         self.assertEqual([], errors)
 
+
+
+class _ResumedStepsHarness(CistemStreamingBase):
+    """Work finished before a Continue lives in _prevSteps, not _steps."""
+
+    def __init__(self, prevSteps, steps=None):
+        self._prevSteps = prevSteps
+        self._steps = steps or []
+
+
+class TestCistemResumedStepGraphVisibility(unittest.TestCase):
+    def test_FinishedStepsRestoredOnResumeAreNotRescheduled(self):
+        # Reading only _steps would hide everything a previous execution
+        # already finished, so Continue would redo that work.
+        protocol = _ResumedStepsHarness(
+            prevSteps=[
+                _FinishedPickingStep(
+                    "pickMicrographListStep",
+                    '[["mic_001", "mic_002"], {}]',
+                ),
+            ],
+            steps=[
+                _FinishedPickingStep(
+                    "pickMicrographStep",
+                    '["mic_003", {}]',
+                ),
+            ],
+        )
+
+        finished = CistemProtFindParticles._getFinishedPickingMicNames(protocol)
+
+        self.assertEqual({"mic_001", "mic_002", "mic_003"}, finished)
+
+    def test_ResumedStepsAreCountedOnlyOnceWhenSharedBetweenLists(self):
+        sharedStep = _FinishedPickingStep(
+            "pickMicrographStep",
+            '["mic_001", {}]',
+        )
+
+        protocol = _ResumedStepsHarness(
+            prevSteps=[sharedStep],
+            steps=[sharedStep],
+        )
+
+        self.assertEqual(
+            1,
+            len(list(protocol._iterKnownStreamingSteps())),
+        )
+
+    def test_UnblurResumeAlsoSeesStepsRestoredFromPreviousRun(self):
+        protocol = _ResumedStepsHarness(
+            prevSteps=[_FinishedMovieStep()],
+        )
+
+        self.assertEqual(
+            {1},
+            CistemProtUnblur._getFinishedMovieIds(protocol),
+        )
+
+
+class TestCistemCtffindStreamingThreadValidation(unittest.TestCase):
+    def test_CtffindGeneratorRejectsOneExecutionWorker(self):
+        protocol = _ThreadValidationHarness(2)
+
+        errors = CistemProtCTFFind._validateStreamingThreads(protocol)
+
+        self.assertTrue(errors)
+
+    def test_CtffindGeneratorAcceptsTwoExecutionWorkers(self):
+        protocol = _ThreadValidationHarness(3)
+
+        errors = CistemProtCTFFind._validateStreamingThreads(protocol)
+
+        self.assertEqual([], errors)
+
+
+class _CostTrackingHarness(_CtffindStreamingHarness):
+    """Ctffind discovery over a Set that reports what it hydrated."""
+
+    def __init__(self, inputSet):
+        super().__init__(inputSet)
+        self._steps = []
+        self.insertedMicNames = []
+        self.updateStepsCalls = 0
+
+    def _getFinishedCtfMicNames(self):
+        return CistemProtCTFFind._getFinishedCtfMicNames(self)
+
+    def _getScheduledCtfMicNames(self):
+        return CistemProtCTFFind._getScheduledCtfMicNames(self)
+
+    def _loadInputList(self):
+        return CistemProtCTFFind._loadSet(
+            self, self._inputSet, None, lambda mic: mic.getMicName())
+
+    def _insertNewMicsSteps(self, newMics):
+        newMics = list(newMics)
+        self.insertedMicNames.extend(mic.getMicName() for mic in newMics)
+
+        for mic in newMics:
+            self.micDict[mic.getMicName()] = mic
+
+        return []
+
+    def updateSteps(self):
+        self.updateStepsCalls += 1
+
+
+class TestCistemStreamingDiscoveryCost(unittest.TestCase):
+    """A poll must cost what just arrived, not everything seen so far."""
+
+    @staticmethod
+    def _mics(firstId, count):
+        return [_Mic(micId, "mic_%03d" % micId)
+                for micId in range(firstId, firstId + count)]
+
+    def test_CtffindPollOnlyHydratesTheMicrographsThatJustArrived(self):
+        inputSet = _LogicalMicrographSet(self._mics(1, 500))
+        protocol = _CostTrackingHarness(inputSet)
+
+        CistemProtCTFFind._checkNewInput(protocol)
+
+        self.assertEqual(500, inputSet.hydratedItems)
+
+        inputSet.addItems(self._mics(501, 3))
+        hydratedBefore = inputSet.hydratedItems
+
+        CistemProtCTFFind._checkNewInput(protocol)
+
+        self.assertEqual(3, inputSet.hydratedItems - hydratedBefore)
+        self.assertEqual(0, inputSet.fullScans)
+
+    def test_CtffindIdlePollHydratesNothingAtAll(self):
+        inputSet = _LogicalMicrographSet(self._mics(1, 500))
+        protocol = _CostTrackingHarness(inputSet)
+
+        CistemProtCTFFind._checkNewInput(protocol)
+        hydratedBefore = inputSet.hydratedItems
+
+        CistemProtCTFFind._checkNewInput(protocol)
+
+        self.assertEqual(hydratedBefore, inputSet.hydratedItems)
+
+    def test_UnblurPollOnlyHydratesTheMoviesThatJustArrived(self):
+        movies = [_LogicalMovie(movieId) for movieId in range(1, 501)]
+        movieSet = _LogicalMovieSet(movies, streamClosed=False)
+        protocol = _UnblurInputCheckHarness(movieSet)
+
+        CistemProtUnblur._checkNewInput(protocol)
+
+        self.assertEqual(500, movieSet.hydratedItems)
+
+        movieSet.addItems([_LogicalMovie(501), _LogicalMovie(502)])
+        hydratedBefore = movieSet.hydratedItems
+
+        CistemProtUnblur._checkNewInput(protocol)
+
+        self.assertEqual(2, movieSet.hydratedItems - hydratedBefore)
+        self.assertEqual(0, movieSet.fullScans)
+        self.assertEqual([501, 502], protocol.insertedMovieIds[-2:])
+
+    def test_StepGraphScanDoesNotReparseStepsItAlreadyRead(self):
+        protocol = _CostTrackingHarness(_LogicalMicrographSet([]))
+
+        parsed = []
+        original = CistemStreamingBase._parseStepArgKeys
+
+        def countingParse(step, dictField, keyType):
+            parsed.append(step)
+            return original(step, dictField, keyType)
+
+        # A plain function, not staticmethod(): an instance attribute is
+        # never bound, and a staticmethod object is only callable itself
+        # from Python 3.10 on.
+        protocol._parseStepArgKeys = countingParse
+
+        protocol._steps = [
+            _FinishedCtfStep("mic_%03d" % micId) for micId in range(1, 201)
+        ]
+
+        self.assertEqual(200, len(protocol._getFinishedCtfMicNames()))
+        self.assertEqual(200, len(parsed))
+
+        protocol._steps.append(_FinishedCtfStep("mic_201"))
+
+        self.assertEqual(201, len(protocol._getFinishedCtfMicNames()))
+        # Only the new step is parsed again, not the 200 already read.
+        self.assertEqual(201, len(parsed))
+
+    def test_ResumeStartsAboveWhatIsAlreadyPublishedButKeepsTheGaps(self):
+        inputSet = _LogicalMicrographSet(self._mics(1, 100))
+        protocol = _CostTrackingHarness(inputSet)
+
+        # A previous run published everything except mic_042.
+        publishedIds = set(range(1, 101)) - {42}
+
+        watermark, gapIds = protocol._resumeWatermarkWithGaps(
+            inputSet, publishedIds)
+
+        self.assertEqual(100, watermark)
+        self.assertEqual({42}, gapIds)
+        self.assertEqual(0, inputSet.hydratedItems)
+
+    def test_StepGraphScanSeesAPendingStepFinishAfterTheListIsRebuilt(self):
+        protocol = _CostTrackingHarness(_LogicalMicrographSet([]))
+        protocol._steps = [
+            _ScheduledPickingStep(
+                "estimateCtfStep", '["mic_001", {}]', finished=False),
+        ]
+
+        self.assertEqual(set(), protocol._getFinishedCtfMicNames())
+
+        # pyworkflow can rebuild the step list from the database, handing
+        # back new objects for the same positions.
+        protocol._steps = [
+            _ScheduledPickingStep(
+                "estimateCtfStep", '["mic_001", {}]', finished=True),
+        ]
+
+        self.assertEqual({"mic_001"}, protocol._getFinishedCtfMicNames())

@@ -28,7 +28,6 @@
 # *
 # **************************************************************************
 
-import json
 import os
 import time
 from collections import OrderedDict
@@ -42,9 +41,13 @@ from pwem.objects import CTFModel
 from pwem import emlib
 
 from .program_ctffind import ProgramCtffind
+from .protocol_streaming_base import CistemStreamingBase
+
+# Module level: these helpers are called unbound on light test harnesses.
+CTF_STEP_NAMES = ('estimateCtfStep', 'estimateCtfListStep')
 
 
-class CistemProtCTFFind(ProtCTFMicrographs):
+class CistemProtCTFFind(CistemStreamingBase, ProtCTFMicrographs):
     """ Estimate CTF for a set of micrographs with ctffind.
     
     To find more information about ctffind visit:
@@ -83,6 +86,8 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         self._defineCtfParamsDict()
 
         self.micDict = OrderedDict()
+        self._pendingMics = OrderedDict()
+        self._knownMicIds = set()
         self.streamClosed = False
         self.finished = False
         self.initialIds = self._insertInitialSteps()
@@ -210,102 +215,37 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         """ Redefined func from the base class. """
         self._doCtfEstimation(mic)
 
-    def _getPublishedCtfMicNames(self):
-        """Return micrographs already present in the logical CTF output."""
-        outputCtf = getattr(
-            self,
-            "outputCTF",
-            None,
-        )
-
-        if outputCtf is None:
-            return set()
-
-        iterator = outputCtf.iterItems() if hasattr(outputCtf, "iterItems") else iter(outputCtf)
-
-        publishedMicNames = set()
-
-        for ctf in iterator:
-            mic = ctf.getMicrograph()
-
-            if mic is not None:
-                publishedMicNames.add(mic.getMicName())
-
-        return publishedMicNames
-
     def _getFinishedCtfMicNames(self):
         """Return micrographs represented by finished CTF processing steps."""
-        finishedMicNames = set()
+        return self._collectStepArgKeys(CTF_STEP_NAMES)
 
-        for step in getattr(
-                self,
-                "_steps",
-                [],
-        ):
-            if not step.isFinished():
-                continue
-
-            funcName = getattr(step, "funcName", None)
-
-            if hasattr(funcName, "get"):
-                funcName = funcName.get()
-
-            if funcName not in (
-                    "estimateCtfStep",
-                    "estimateCtfListStep",
-            ):
-                continue
-
-            argsStr = getattr(step, "argsStr", None)
-
-            if hasattr(argsStr, "get"):
-                argsStr = argsStr.get("[]")
-
-            try:
-                args = json.loads(argsStr or "[]")
-            except (
-                    TypeError,
-                    ValueError,
-            ):
-                continue
-
-            if not args:
-                continue
-
-            micArg = args[0]
-
-            if (
-                    funcName
-                    == "estimateCtfListStep"
-            ):
-                if isinstance(micArg, list):
-                    finishedMicNames.update(micArg)
-            else:
-                finishedMicNames.add(micArg)
-
-        return finishedMicNames
+    def _getScheduledCtfMicNames(self):
+        """Return micrographs represented by persisted CTF steps."""
+        return self._collectStepArgKeys(CTF_STEP_NAMES, onlyFinished=False)
 
     def _restoreProcessedMicsFromPersistentState(self):
-        """Restore already processed inputs when resuming the generator.
+        """Place the watermark past what a previous run already published.
 
-        Published CTFs and finished processing steps are persistent state.
-        Seeding micDict with their corresponding logical input objects keeps
-        discovery incremental after Continue without filesystem markers.
+        A published CTF carries the object id of its micrograph, so the
+        output Set alone says where discovery can restart - no need to walk
+        the input looking for names. Micrographs that were estimated but
+        never published come back as gaps and get published on the first
+        output check, which is cheaper than keeping them out of the stream.
         """
-        processedMicNames = (self._getPublishedCtfMicNames()
-                             | self._getFinishedCtfMicNames())
+        self._lastInputId = getattr(self, '_lastInputId', 0)
 
-        if not processedMicNames:
+        publishedIds = self._getOutputIdSet(
+            getattr(self, 'outputCTF', None))
+
+        if not publishedIds:
             return
 
-        inputMics = self.getInputMicrographs()
-        inputMics.loadAllProperties()
+        watermark, gapIds = self._resumeWatermarkWithGaps(
+            self.getInputMicrographs(), publishedIds)
 
-        for mic in inputMics.iterItems():
-            micName = mic.getMicName()
-
-            if micName in processedMicNames:
-                self.micDict[micName] = mic.clone()
+        self._lastInputId = max(self._lastInputId, watermark)
+        self._knownMicIds.update(publishedIds)
+        self._resumeGapIds = gapIds
 
     def _checkNewOutput(self):
         """Publish finished CTF steps without filesystem sidecars.
@@ -321,32 +261,19 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         ):
             return
 
-        publishedMicNames = self._getPublishedCtfMicNames()
-
         finishedMicNames = self._getFinishedCtfMicNames()
 
-        listOfMics = list(self.micDict.values())
-
+        # micDict holds what has been scheduled and not published yet, so
+        # only that has to be looked at - never every micrograph seen so far.
         newDone = [
             mic
-            for mic in listOfMics
-            if (
-                mic.getMicName()
-                in finishedMicNames
-                and mic.getMicName()
-                not in publishedMicNames
-            )
+            for micName, mic in self.micDict.items()
+            if micName in finishedMicNames
         ]
 
-        completedMicNames = (
-            publishedMicNames
-            | finishedMicNames
-        )
-
-        allDone = all(
-            mic.getMicName()
-            in completedMicNames
-            for mic in listOfMics
+        allDone = (
+            len(newDone) == len(self.micDict)
+            and not self._pendingMics
         )
 
         self.finished = self.streamClosed and allDone
@@ -355,6 +282,9 @@ class CistemProtCTFFind(ProtCTFMicrographs):
 
         if newDone:
             self._updateOutputCTFSet(newDone, streamMode)
+
+            for mic in newDone:
+                self.micDict.pop(mic.getMicName(), None)
         elif not self.finished:
             if allDone:
                 self._streamingSleepOnWait()
@@ -364,15 +294,6 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         if self.finished:
             self._updateStreamState(streamMode)
 
-            outputStep = self._getFirstJoinStep()
-
-            if outputStep and outputStep.isWaiting():
-                from pyworkflow.protocol.constants import (
-                    STATUS_NEW,
-                )
-
-                outputStep.setStatus(STATUS_NEW)
-
     def _checkNewInput(self):
         """Discover new micrographs from the logical Set.
 
@@ -381,14 +302,16 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         """
         micDict, self.streamClosed = self._loadInputList()
 
-        newMics = micDict.values()
-        outputStep = self._getFirstJoinStep()
+        newMics = list(micDict.values())
 
         if newMics:
-            dependencies = self._insertNewMicsSteps(newMics)
+            self._insertNewMicsSteps(newMics)
 
-            if outputStep is not None:
-                outputStep.addPrerequisites(*dependencies)
+            # pwem only takes whole batches; whatever it left out has to be
+            # offered again, because discovery will not find it twice.
+            for mic in newMics:
+                if mic.getMicName() in self.micDict:
+                    self._pendingMics.pop(mic.getMicName(), None)
 
             self.updateSteps()
 
@@ -398,24 +321,61 @@ class CistemProtCTFFind(ProtCTFMicrographs):
             SetClass,
             getKeyFunc,
     ):
-        """Load new items from the logical Set, independently of storage."""
+        """Discover the items added since the last poll.
+
+        Only ids above the watermark are queried and only those items are
+        hydrated, so a poll costs what just arrived instead of everything
+        the stream has produced. Items a batch has not taken yet stay in
+        _pendingMics and are offered again next time, since the watermark
+        will never look back at them.
+        """
         self.debug(
-            "Loading logical input set."
+            "Discovering new items from the logical input set."
         )
 
-        inputSet.loadAllProperties()
+        newItems, producerClosed, terminalConsistent = (
+            self._discoverNewInputItems(
+                inputSet,
+                '_lastInputId',
+                self._knownMicIds,
+            )
+        )
 
-        newItemDict = OrderedDict()
+        gapIds = getattr(self, '_resumeGapIds', None)
 
-        for item in inputSet.iterItems():
+        if gapIds:
+            newItems = (
+                self._loadLogicalSetItemsByIds(inputSet, gapIds)
+                + newItems
+            )
+            self._resumeGapIds = set()
+
+        scheduledMicNames = self._getScheduledCtfMicNames()
+
+        for item in newItems:
+            itemId = item.getObjId()
+
+            if itemId in self._knownMicIds:
+                continue
+
+            self._knownMicIds.add(itemId)
+
             itemKey = getKeyFunc(item)
 
-            if itemKey not in self.micDict:
-                newItemDict[itemKey] = item.clone()
+            if itemKey in self.micDict:
+                continue
 
-        streamClosed = inputSet.isStreamClosed()
+            if itemKey in scheduledMicNames:
+                # Already has a step from an earlier run: it only needs
+                # publishing, so it must not be scheduled a second time.
+                self.micDict[itemKey] = item
+                continue
 
-        return newItemDict, streamClosed
+            self._pendingMics[itemKey] = item
+
+        streamClosed = producerClosed and terminalConsistent
+
+        return OrderedDict(self._pendingMics), streamClosed
 
     def _createCtfModel(self, mic, updateSampling=False):
         """ Redefined func from the base class. """
@@ -433,8 +393,20 @@ class CistemProtCTFFind(ProtCTFMicrographs):
         pass
 
     # -------------------------- INFO functions -------------------------------
+    def _validateStreamingThreads(self):
+        """The generator holds one thread for the whole run.
+
+        One more thread is reserved by the step executor, so fewer than
+        three threads leaves nothing to actually estimate CTFs with.
+        """
+        if self.numberOfThreads.get() < 3:
+            return ['Ctffind streaming requires at least 3 threads.']
+
+        return []
+
     def _validate(self):
-        errors = []
+        errors = self._validateStreamingThreads()
+
         if self.inputType == 0:
             errors.append('Movie CTF estimation is not supported yet.')
 

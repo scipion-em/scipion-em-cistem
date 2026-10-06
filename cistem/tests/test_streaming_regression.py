@@ -13,6 +13,8 @@ from cistem.protocols.protocol_picking import CistemProtFindParticles
 from cistem.protocols.protocol_unblur import CistemProtUnblur
 from cistem.protocols.protocol_ctffind import CistemProtCTFFind
 
+from .logical_set_fakes import LogicalSetFake
+
 
 class _Mic:
     def __init__(self, obj_id=1, ctf=None):
@@ -513,39 +515,30 @@ class TestCistemStreamingRegression(unittest.TestCase):
             def __init__(self, mic):
                 self.mic = mic
 
+            def getObjId(self):
+                return self.mic.getObjId()
+
             def getMicrograph(self):
                 return self.mic
 
             def clone(self):
                 return _LogicalCtf(self.mic)
 
-        class _LogicalSet:
+        class _LogicalSet(LogicalSetFake):
             def __init__(self, items, closed=True):
-                self.items = list(items)
-                self.closed = closed
-                self.reloads = 0
-
-            def getFileName(self):
-                raise AssertionError(
-                    "CISTEM streaming must use the logical Set API, "
-                    "not reconstruct a Set from a persistence filename."
-                )
-
-            def loadAllProperties(self):
-                self.reloads += 1
-
-            def iterItems(self):
-                return iter(self.items)
-
-            def __iter__(self):
-                return self.iterItems()
-
-            def isStreamClosed(self):
-                return self.closed
+                super().__init__(items, streamClosed=closed)
 
         class _LogicalPickingHarness(CistemProtFindParticles):
             def __init__(self, micSet, ctfSet):
                 self.micDict = OrderedDict()
+                self._pendingMics = OrderedDict()
+                self._micsWithoutCtf = OrderedDict()
+                self._ctfByMicName = {}
+                self._knownMicIds = set()
+                self._knownCtfIds = set()
+                self._lastMicId = 0
+                self._lastCtfId = 0
+                self._steps = []
                 self._micSet = micSet
                 self.ctfRelations = _Pointer(ctfSet)
 

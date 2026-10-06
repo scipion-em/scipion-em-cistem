@@ -28,7 +28,6 @@
 # *
 # **************************************************************************
 
-import json
 import time
 from datetime import datetime
 from math import ceil
@@ -38,7 +37,6 @@ import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
 
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.constants import PROD
 import pyworkflow.protocol.params as params
 from pyworkflow.gui.plotter import Plotter
@@ -48,9 +46,20 @@ from pwem.protocols import ProtAlignMovies
 from cistem import Plugin
 from ..convert import readShiftsMovieAlignment
 from ..constants import UNBLUR_BIN
+from .protocol_streaming_base import CistemStreamingBase
+
+# Module level: the output-id helper is called unbound on light test
+# harnesses, so it cannot rely on a class attribute.
+UNBLUR_OUTPUT_NAMES = (
+    'outputMicrographs',
+    'outputMicrographsDoseWeighted',
+    'outputMovies',
+    'outputMicrographsEven',
+    'outputMicrographsOdd',
+)
 
 
-class CistemProtUnblur(ProtAlignMovies):
+class CistemProtUnblur(CistemStreamingBase, ProtAlignMovies):
     """ This protocol wraps unblur movie alignment program. """
 
     _label = 'unblur'
@@ -198,22 +207,19 @@ class CistemProtUnblur(ProtAlignMovies):
         convertStepId = self._insertFunctionStep('_convertInputStep', prerequisites=[])
         self.convertCIStep = [convertStepId]
 
-        generatorStepId = self._insertFunctionStep(
+        self._insertFunctionStep(
             'resumableStepGeneratorStep',
             str(datetime.now()),
             prerequisites=self.convertCIStep,
             needsGPU=False
         )
 
-        finalSteps = self._insertFinalSteps([generatorStepId])
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=finalSteps, wait=True)
-
     def resumableStepGeneratorStep(self, timestamp):
         self.stepsGeneratorStep()
 
     def stepsGeneratorStep(self):
         self.insertedDict = getattr(self, 'insertedDict', {})
+        self.newDeps = []
         self.streamClosed = False
         self.finished = False
 
@@ -232,9 +238,41 @@ class CistemProtUnblur(ProtAlignMovies):
             else:
                 time.sleep(1)
 
+        # The final steps are inserted once the stream is known to be
+        # exhausted, so nothing has to WAIT on an externally unlocked step.
+        finalSteps = self._insertFinalSteps(self.newDeps)
+        self._insertFunctionStep('createOutputStep',
+                                 prerequisites=finalSteps, needsGPU=False)
+
     def _stepsCheck(self):
         if getattr(self, '_newSteps', False):
             self.updateSteps()
+
+    def createOutputStep(self):
+        """Report failed movies against everything that was discovered.
+
+        pwem's version measures the output against ``listOfMovies``, which
+        here only holds what is still in flight - by the time this runs it
+        is empty, so every failure would go unreported.
+        """
+        output = None
+
+        for _, outputSet in self.iterOutputAttributes():
+            output = outputSet
+            break
+
+        if output is None:
+            return
+
+        discovered = getattr(self, '_discoveredMovieCount', 0)
+
+        if output.getSize() == 0 and discovered != 0:
+            raise Exception("All movies failed, didn't create outputMicrographs."
+                            "Please review movie processing steps above.")
+        elif output.getSize() < discovered:
+            self.warning(pwutils.yellowStr(
+                "WARNING - Failed to align %d movies."
+                % (discovered - output.getSize())))
 
     def _convertInputStep(self):
         """Convert correction images without creating DONE sidecars."""
@@ -243,12 +281,42 @@ class CistemProtUnblur(ProtAlignMovies):
         movies.setDark(self._ProtProcessMovies__convertCorrectionImage(movies.getDark()))
 
     def _loadInputList(self):
-        """Load movies directly from the logical input Set."""
+        """Discover the movies added since the last poll.
+
+        Only the new ids are queried and only those movies are hydrated,
+        so the cost of a poll follows what just arrived rather than
+        everything the stream has produced so far.
+        """
         movieSet = self.inputMovies.get()
-        self.debug("Loading logical input movie set.")
-        movieSet.loadAllProperties()
-        self.listOfMovies = [movie.clone() for movie in movieSet.iterItems()]
-        self.streamClosed = movieSet.isStreamClosed()
+        self.debug("Discovering new movies from the logical input set.")
+
+        newMovies, producerClosed, terminalConsistent = (
+            self._discoverNewInputItems(movieSet, '_lastInputId',
+                                        self._knownMovieIds))
+
+        gapIds = getattr(self, '_resumeGapIds', None)
+
+        if gapIds:
+            newMovies = (self._loadLogicalSetItemsByIds(movieSet, gapIds)
+                         + newMovies)
+            self._resumeGapIds = set()
+
+        for movie in newMovies:
+            movieId = movie.getObjId()
+
+            if movieId in self._knownMovieIds:
+                continue
+
+            self._knownMovieIds.add(movieId)
+            self._pendingMovies[movieId] = movie
+            self._discoveredMovieCount += 1
+
+        self.streamClosed = producerClosed and terminalConsistent
+
+        # pwem's createOutputStep reports how many movies failed, which it
+        # derives from listOfMovies; keep it holding what is still in
+        # flight and track the discovered total separately.
+        self.listOfMovies = list(self._pendingMovies.values())
 
     def _checkNewInput(self):
         """Discover new movies from the logical input Set."""
@@ -256,122 +324,92 @@ class CistemProtUnblur(ProtAlignMovies):
 
         newMovies = any(movie.getObjId() not in self.insertedDict
                         for movie in self.listOfMovies)
-        outputStep = self._getFirstJoinStep()
 
         if newMovies:
             dependencies = self._insertNewMoviesSteps(self.insertedDict, self.listOfMovies)
-            if outputStep is not None:
-                outputStep.addPrerequisites(*dependencies)
+            self.newDeps.extend(dependencies)
             self.updateSteps()
 
     def _getPublishedMovieIds(self):
-        """Return movie ids already present in logical outputs."""
-        publishedIds = set()
-        outputNames = (
-            'outputMicrographs',
-            'outputMicrographsDoseWeighted',
-            'outputMovies',
-            'outputMicrographsEven',
-            'outputMicrographsOdd',
-        )
+        """Return movie ids already present in logical outputs.
 
-        for outputName in outputNames:
+        This asks each output Set for its ids instead of walking it and
+        hydrating every item, which matters because the outputs grow with
+        the stream. It is only needed once, when restoring state.
+        """
+        publishedIds = set()
+
+        for outputName in UNBLUR_OUTPUT_NAMES:
             outputSet = getattr(self, outputName, None)
+
             if outputSet is None:
                 continue
 
-            iterator = outputSet.iterItems() if hasattr(outputSet, 'iterItems') else iter(outputSet)
-            for item in iterator:
-                itemId = item.getObjId()
-                if itemId is not None:
-                    publishedIds.add(itemId)
+            publishedIds.update(self._getOutputIdSet(outputSet))
+
+        publishedIds.discard(None)
 
         return publishedIds
 
     def _getScheduledMovieIds(self):
         """Return movie ids represented by persisted processMovieStep steps."""
-        scheduledIds = set()
-
-        for step in getattr(self, '_steps', []):
-            funcName = getattr(step, 'funcName', None)
-            if hasattr(funcName, 'get'):
-                funcName = funcName.get()
-
-            if funcName != 'processMovieStep':
-                continue
-
-            argsStr = getattr(step, 'argsStr', None)
-            if hasattr(argsStr, 'get'):
-                argsStr = argsStr.get('[]')
-
-            try:
-                args = json.loads(argsStr or '[]')
-            except (TypeError, ValueError):
-                continue
-
-            if not args or not isinstance(args[0], dict):
-                continue
-
-            movieId = args[0].get('object.id')
-            if movieId is not None:
-                scheduledIds.add(movieId)
-
-        return scheduledIds
+        return self._collectStepArgKeys(('processMovieStep',),
+                                        onlyFinished=False,
+                                        dictField='object.id')
 
     def _restoreProcessedMoviesFromPersistentState(self):
-        """Restore already published or scheduled movies before discovery."""
-        restoredIds = self._getPublishedMovieIds() | self._getScheduledMovieIds()
+        """Restore already published or scheduled movies before discovery.
+
+        This is the one place that reads the whole published state, and it
+        runs once per execution rather than once per poll. The watermark
+        starts past whatever is already published so a Continue does not
+        walk the movies a previous run already dealt with.
+        """
+        self._knownMovieIds = getattr(self, '_knownMovieIds', set())
+        self._pendingMovies = getattr(self, '_pendingMovies', {})
+        self._lastInputId = getattr(self, '_lastInputId', 0)
+        self._discoveredMovieCount = getattr(self, '_discoveredMovieCount', 0)
+
+        publishedIds = self._getPublishedMovieIds()
+        restoredIds = publishedIds | self._getScheduledMovieIds()
+
+        self._publishedAnyOutput = bool(publishedIds)
 
         for movieId in restoredIds:
             self.insertedDict.setdefault(movieId, movieId)
 
+        self._knownMovieIds.update(restoredIds)
+        self._discoveredMovieCount = max(self._discoveredMovieCount,
+                                         len(self._knownMovieIds))
+
+        watermark, gapIds = self._resumeWatermarkWithGaps(
+            self.inputMovies.get(), restoredIds)
+
+        self._lastInputId = max(self._lastInputId, watermark)
+
+        # A movie below the watermark that was never processed still has to
+        # be picked up; discovery itself will not look that far back again.
+        self._resumeGapIds = gapIds
+
     def _getFinishedMovieIds(self):
         """Return movie ids represented by finished processMovieStep steps."""
-        finishedIds = set()
-
-        for step in getattr(self, '_steps', []):
-            if not step.isFinished():
-                continue
-
-            funcName = getattr(step, 'funcName', None)
-            if hasattr(funcName, 'get'):
-                funcName = funcName.get()
-
-            if funcName != 'processMovieStep':
-                continue
-
-            argsStr = getattr(step, 'argsStr', None)
-            if hasattr(argsStr, 'get'):
-                argsStr = argsStr.get('[]')
-
-            try:
-                args = json.loads(argsStr or '[]')
-            except (TypeError, ValueError):
-                continue
-
-            if not args or not isinstance(args[0], dict):
-                continue
-
-            movieId = args[0].get('object.id')
-            if movieId is not None:
-                finishedIds.add(movieId)
-
-        return finishedIds
+        return self._collectStepArgKeys(('processMovieStep',),
+                                        dictField='object.id')
 
     def _checkNewOutput(self):
         """Publish finished movies without filesystem completion markers."""
         if getattr(self, 'finished', False):
             return
 
-        publishedIds = self._getPublishedMovieIds()
+        # Only movies still in flight can become publishable, so the scan
+        # follows what is pending instead of everything discovered so far.
         finishedIds = self._getFinishedMovieIds()
-        newDone = [movie for movie in self.listOfMovies
-                   if movie.getObjId() in finishedIds and movie.getObjId() not in publishedIds]
+        newDone = [movie for movieId, movie in self._pendingMovies.items()
+                   if movieId in finishedIds]
 
-        self._firstTimeOutput = len(publishedIds) == 0
-        completedIds = publishedIds | finishedIds
-        inputIds = {movie.getObjId() for movie in self.listOfMovies}
-        self.finished = self.streamClosed and inputIds.issubset(completedIds)
+        self._firstTimeOutput = not self._publishedAnyOutput
+        self.finished = (self.streamClosed
+                         and len(newDone) == len(self._pendingMovies))
         streamMode = pwobj.Set.STREAM_CLOSED if self.finished else pwobj.Set.STREAM_OPEN
 
         if not newDone and not self.finished:
@@ -379,10 +417,13 @@ class CistemProtUnblur(ProtAlignMovies):
 
         self._updateOutputSets(newDone, streamMode)
 
-        if self.finished:
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
+        for movie in newDone:
+            self._pendingMovies.pop(movie.getObjId(), None)
+
+        if newDone:
+            self._publishedAnyOutput = True
+
+        self.listOfMovies = list(self._pendingMovies.values())
 
     def processMovieStep(self, movieDict, hasAlignment):
         """Process one movie using the protocol step status as completion state."""
