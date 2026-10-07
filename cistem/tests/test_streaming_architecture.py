@@ -1746,18 +1746,17 @@ class TestCistemFindParticlesGeneratorOrchestration(unittest.TestCase):
         CistemProtFindParticles._insertAllSteps(protocol)
 
         self.assertTrue(protocol.inputStreaming)
-        self.assertEqual(0, protocol.legacyInitialCalls)
         self.assertEqual(0, protocol.legacyLoadCalls)
         self.assertEqual(0, protocol.legacyFinalCalls)
 
-        self.assertEqual(1, len(protocol.insertCalls))
-        self.assertEqual(
-            "resumableStepGeneratorStep",
-            protocol.insertCalls[0]["funcName"],
-        )
-        self.assertFalse(
-            protocol.insertCalls[0]["kwargs"].get("needsGPU", True)
-        )
+        # The conversion step is scheduled up front; the streaming work
+        # itself is driven by one generator, and only one.
+        self.assertEqual(1, protocol.legacyInitialCalls)
+
+        generatorCalls = [call for call in protocol.insertCalls
+                          if call["funcName"] == "resumableStepGeneratorStep"]
+        self.assertEqual(1, len(generatorCalls))
+        self.assertFalse(generatorCalls[0]["kwargs"].get("needsGPU", True))
 
 
 class _ScheduledPickingStep:
@@ -2231,3 +2230,51 @@ class TestCistemStreamingNoticesTheProducerClosing(unittest.TestCase):
         self.assertEqual([], items)
         self.assertTrue(producerClosed)
         self.assertEqual(1, inputSet.reloads)
+
+
+class _PickingInsertStepsHarness(CistemStreamingBase):
+    """Records the step graph _insertAllSteps builds in streaming mode."""
+
+    def __init__(self):
+        self.inserted = []
+        self._inputMics = _LogicalMicrographSet([], streamClosed=False)
+        self._inputMics.strId = lambda: "42"
+
+    def getInputMicrographs(self):
+        return self._inputMics
+
+    def getInputReferences(self):
+        return None
+
+    def _getPickArgs(self):
+        return []
+
+    def _insertInitialSteps(self):
+        return CistemProtFindParticles._insertInitialSteps(self)
+
+    def resumableStepGeneratorStep(self, timestamp):
+        raise AssertionError("The generator must not run while inserting.")
+
+    def _insertFunctionStep(self, func, *args, **kwargs):
+        stepId = len(self.inserted) + 1
+        name = func if isinstance(func, str) else func.__name__
+        self.inserted.append((name, kwargs.get('prerequisites'), stepId))
+        return stepId
+
+
+class TestCistemPickingGeneratorPrerequisites(unittest.TestCase):
+    def test_ConvertStepRunsBeforeTheGeneratorStarts(self):
+        # Every picking step takes the conversion step as a prerequisite.
+        # If the generator inserted it itself, those steps would wait on a
+        # step the executor never planned, and the protocol would poll
+        # forever without picking anything.
+        protocol = _PickingInsertStepsHarness()
+
+        CistemProtFindParticles._insertAllSteps(protocol)
+
+        names = [entry[0] for entry in protocol.inserted]
+        self.assertEqual(['convertInputStep', 'resumableStepGeneratorStep'],
+                         names)
+
+        convertId = protocol.inserted[0][2]
+        self.assertEqual([convertId], protocol.inserted[1][1])

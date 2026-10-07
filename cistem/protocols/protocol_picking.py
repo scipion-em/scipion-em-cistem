@@ -166,9 +166,17 @@ class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
         self.inputStreaming = self.getInputMicrographs().isStreamOpen()
 
         if self.inputStreaming:
+            # The conversion step must be scheduled here, not from inside
+            # the generator: every picking step takes it as a prerequisite,
+            # and a step inserted by a running step is not one the executor
+            # has already planned around - the picking steps would wait on
+            # it forever and the generator would poll with nothing to do.
+            initialIds = self._insertInitialSteps()
+
             self._insertFunctionStep(
                 self.resumableStepGeneratorStep,
                 str(datetime.now()),
+                prerequisites=initialIds,
                 needsGPU=False,
             )
         else:
@@ -201,7 +209,8 @@ class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
         self._lastCtfId = 0
         self.streamClosed = False
         self.finished = False
-        self.initialIds = self._insertInitialSteps()
+        # The conversion step already ran before the generator started.
+        self.initialIds = []
 
         self._restoreProcessedMicsFromPersistentState()
 
