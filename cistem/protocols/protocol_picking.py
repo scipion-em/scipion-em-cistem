@@ -215,6 +215,12 @@ class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
         self._restoreProcessedMicsFromPersistentState()
 
         while not self.finished:
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the run
+            # hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
             self._checkNewInput()
             self._checkNewOutput()
 
@@ -443,7 +449,13 @@ class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
         one-shot dict.
         """
         self.ctfDict = {}
-        if self.ctfRelations.get() is not None:
+
+        # Only the non-streaming path ever reads this: while streaming,
+        # every micrograph reaching a picking step already carries the CTF
+        # _loadInputList attached to it. Building it anyway would walk the
+        # whole CTF Set and hold a clone of every entry for the rest of
+        # the run, for something nothing reads.
+        if not self.inputStreaming and self.ctfRelations.get() is not None:
             for ctf in self.ctfRelations.get():
                 self.ctfDict[ctf.getMicrograph().getMicName()] = ctf.clone()
 
@@ -771,8 +783,26 @@ eof"""
         return self._getExtraPath('FAILED_all.TXT')
 
     def _writeFailedList(self, micList):
-        """Do not persist failed micrographs in filesystem sidecars."""
-        pass
+        """Record which micrographs the picker could not handle.
+
+        This is a report, not completion state: a micrograph that failed
+        produces no coordinates, which on its own is indistinguishable
+        from one that simply had no particles, so without this the only
+        trace of the failure is a log line.
+        """
+        with open(self._getAllFailed(), 'a') as handle:
+            for mic in micList:
+                handle.write('%d\n' % mic.getObjId())
+
+    def _readFailedList(self):
+        """Ids of the micrographs recorded as failed, if any."""
+        failedFile = self._getAllFailed()
+
+        if not os.path.exists(failedFile):
+            return []
+
+        with open(failedFile) as handle:
+            return [int(line.strip()) for line in handle if line.strip()]
 
     def getInputReferences(self):
         return self.inputRefs.get() if self.inputRefs.hasValue() else None

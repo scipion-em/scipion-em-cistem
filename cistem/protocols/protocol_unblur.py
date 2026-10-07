@@ -28,6 +28,7 @@
 # *
 # **************************************************************************
 
+import os
 import time
 from datetime import datetime
 from math import ceil
@@ -226,6 +227,14 @@ class CistemProtUnblur(CistemStreamingBase, ProtAlignMovies):
         self._restoreProcessedMoviesFromPersistentState()
 
         while not self.finished:
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the run
+            # hangs for good with nothing left to do.
+            # Returning, not breaking: the terminal steps below would
+            # only add work the executor can never get to.
+            if self._streamingMustStop():
+                return
+
             self._checkNewInput()
             self._checkNewOutput()
 
@@ -512,9 +521,35 @@ class CistemProtUnblur(CistemStreamingBase, ProtAlignMovies):
             if self._doMovieFolderCleanUp():
                 self._cleanMovieFolder(movieFolder)
 
-    def _writeFailedList(self, movieList):
-        """Do not persist failed movies in filesystem sidecars."""
-        pass
+    def _cleanMovieFolder(self, movieFolder):
+        """Remove a movie's working folder without going through a shell.
+
+        pwem builds a shell command out of the folder path, so a project
+        path with a space in it turns the cleanup into the deletion of
+        whatever the shell reads as a second argument. Refuse anything
+        that is not inside this run's own working directory, and remove
+        it through the filesystem API rather than a command line.
+        """
+        if pwutils.envVarOn('SCIPION_DEBUG_NOCLEAN'):
+            self.info('Clean movie data DISABLED. '
+                      'Movie folder will remain in disk!!!')
+            return
+
+        workspace = os.path.realpath(self._getTmpPath())
+        target = os.path.realpath(movieFolder)
+
+        if target != workspace and not target.startswith(workspace + os.sep):
+            self.warning("Refusing to remove %s: it is outside this run's "
+                         "working directory." % movieFolder)
+            return
+
+        if target == workspace:
+            self.warning("Refusing to remove the working directory itself: "
+                         "every other movie in flight lives there too.")
+            return
+
+        self.info("Erasing movie folder: %s" % movieFolder)
+        pwutils.cleanPath(target)
 
     def _processMovie(self, movie):
         inputMovies = self.getInputMovies()
@@ -545,8 +580,17 @@ class CistemProtUnblur(CistemStreamingBase, ProtAlignMovies):
                                           outputFn=self._getOutputMicThumbnail(movie))
 
             if self._useWorkerThread():
+                # The side thread is joined before this step returns. What
+                # a FINISHED step says is that the movie is done, and
+                # _checkNewOutput publishes it on that word alone - a
+                # thread still writing the PSD, the plots or the thumbnail
+                # would have the micrograph published pointing at files
+                # that are not there yet. Movies already overlap with each
+                # other: each one is a step of its own.
                 thread = Thread(target=_extraWork)
                 thread.start()
+                self._trackWorkerThread(thread)
+                thread.join()
             else:
                 _extraWork()
 
@@ -574,12 +618,36 @@ class CistemProtUnblur(CistemStreamingBase, ProtAlignMovies):
                                           prerequisites=deps, needsGPU=False)
         return [stepId]
 
+    def _trackWorkerThread(self, thread):
+        """Remember a side thread so nothing can outlive the run.
+
+        Movie steps run in parallel, so the registry is guarded by the
+        lock every Protocol already owns - a lock of its own would have to
+        live on the protocol, which is not somewhere a thread primitive
+        belongs.
+        """
+        with self._lock:
+            live = [
+                tracked for tracked in getattr(self, '_workerThreads', [])
+                if tracked.is_alive()
+            ]
+            live.append(thread)
+            self._workerThreads = live
+
     def waitForThreadStep(self):
-        # Quick and dirty (maybe desperate) way to wait
-        # if the PSD and thumbnail were computed in a thread
-        # If running in streaming this will not be necessary
-        if self._useWorkerThread():
-            time.sleep(10)  # wait 10 sec for the thread to finish
+        """Join whatever side threads are still running.
+
+        Each movie's step already joins its own thread, so by the time
+        this runs there is normally nothing left. It stays as the explicit
+        guarantee that the run does not end with work still in flight -
+        the previous version slept for a fixed ten seconds instead, which
+        was neither a guarantee nor free.
+        """
+        with self._lock:
+            threads = list(getattr(self, '_workerThreads', []))
+
+        for thread in threads:
+            thread.join()
 
     # --------------------------- INFO functions -------------------------------
     def _summary(self):

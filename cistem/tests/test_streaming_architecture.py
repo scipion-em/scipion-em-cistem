@@ -886,6 +886,7 @@ class TestCistemCtffindGeneratorResumePublication(
 
 
 class _CtffindGeneratorInitialIdsHarness:
+    _streamingMustStop = CistemStreamingBase._streamingMustStop
     def __init__(self):
         self.finished = False
         self.micDict = None
@@ -1183,6 +1184,7 @@ class _UnblurGeneratorHarness:
 
 
 class _UnblurGeneratorLoopHarness(_UnblurGeneratorHarness):
+    _streamingMustStop = CistemStreamingBase._streamingMustStop
     """Run one generator iteration that already exhausts the input stream."""
 
     def _restoreProcessedMoviesFromPersistentState(self):
@@ -1310,17 +1312,32 @@ class TestCistemUnblurStreamingThreadValidation(unittest.TestCase):
 
 
 class _UnblurFailedSidecarHarness:
+    """Completion must never be answered by reading the failure report."""
+
+    _collectStepArgKeys = CistemStreamingBase._collectStepArgKeys
+    _iterKnownStreamingSteps = CistemStreamingBase._iterKnownStreamingSteps
+    _iterUnscannedSteps = CistemStreamingBase._iterUnscannedSteps
+    _getStepArgScan = CistemStreamingBase._getStepArgScan
+    _getStepFuncName = CistemStreamingBase._getStepFuncName
+    _parseStepArgKeys = CistemStreamingBase._parseStepArgKeys
+
+    def __init__(self):
+        self._steps = []
+        self._prevSteps = []
+
     def _getAllFailed(self):
         raise AssertionError(
-            "Unblur streaming failure state must not depend on a failed sidecar."
+            "Unblur completion state must come from the step graph, never "
+            "from the failure report."
         )
 
 
 class TestCistemUnblurStreamingFailurePersistence(unittest.TestCase):
-    def test_UnblurDoesNotWriteFailedMovieSidecar(self):
+    def test_UnblurCompletionDoesNotConsultTheFailureReport(self):
         protocol = _UnblurFailedSidecarHarness()
 
-        CistemProtUnblur._writeFailedList(protocol, [_LogicalMovie(1)])
+        self.assertEqual(set(), CistemProtUnblur._getFinishedMovieIds(protocol))
+        self.assertEqual(set(), CistemProtUnblur._getScheduledMovieIds(protocol))
 
 
 class _UnblurArgFailureHarness:
@@ -1389,7 +1406,7 @@ class TestCistemUnblurMissingShiftsFailure(unittest.TestCase):
 class _FindParticlesInputSetGuard:
     def getFileName(self):
         raise AssertionError(
-            "FindParticles streaming discovery must not depend on a SQLite/storage filename."
+            "FindParticles streaming discovery must not depend on a storage filename."
         )
 
 
@@ -1670,19 +1687,37 @@ class TestCistemFindParticlesStreamingProcessing(unittest.TestCase):
 
 
 class _FindParticlesFailedSidecarHarness:
+    """Completion must never be answered by reading the failure report."""
+
+    _collectStepArgKeys = CistemStreamingBase._collectStepArgKeys
+    _iterKnownStreamingSteps = CistemStreamingBase._iterKnownStreamingSteps
+    _iterUnscannedSteps = CistemStreamingBase._iterUnscannedSteps
+    _getStepArgScan = CistemStreamingBase._getStepArgScan
+    _getStepFuncName = CistemStreamingBase._getStepFuncName
+    _parseStepArgKeys = CistemStreamingBase._parseStepArgKeys
+
+    def __init__(self):
+        self._steps = []
+        self._prevSteps = []
+
     def _getAllFailed(self):
         raise AssertionError(
-            "FindParticles failure state must not depend on FAILED_all.TXT."
+            "FindParticles completion state must come from the step graph, "
+            "never from the failure report."
         )
 
 
 class TestCistemFindParticlesFailurePersistence(unittest.TestCase):
-    def test_FindParticlesDoesNotWriteFailedMicrographSidecar(self):
+    def test_FindParticlesCompletionDoesNotConsultTheFailureReport(self):
         protocol = _FindParticlesFailedSidecarHarness()
 
-        CistemProtFindParticles._writeFailedList(
-            protocol,
-            [_Mic(1, "mic_001")],
+        self.assertEqual(
+            set(),
+            CistemProtFindParticles._getFinishedPickingMicNames(protocol),
+        )
+        self.assertEqual(
+            set(),
+            CistemProtFindParticles._getScheduledPickingMicNames(protocol),
         )
 
 

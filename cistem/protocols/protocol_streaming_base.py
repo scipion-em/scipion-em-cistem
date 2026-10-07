@@ -17,6 +17,8 @@
 
 import json
 
+import pyworkflow.protocol.constants as cons
+
 
 class _StepArgScan:
     """Incremental scan state for one ``_collectStepArgKeys`` query.
@@ -47,6 +49,22 @@ class CistemStreamingBase:
     it runs.
     """
 
+    # --------------------------- termination ---------------------------
+
+    def _streamingMustStop(self):
+        """True when the generator has to abandon its polling loop.
+
+        A failed step makes pyworkflow mark the protocol as FAILED and the
+        executor break out of its own loop - and then join every running
+        thread, the generator's among them. A generator that keeps polling
+        is never joined, so the whole run hangs with nothing left to do.
+        The same applies once it has been aborted.
+        """
+        status = getattr(self, 'status', None)
+        value = status.get() if hasattr(status, 'get') else status
+
+        return value in (cons.STATUS_FAILED, cons.STATUS_ABORTED)
+
     # ------------------------- input discovery -------------------------
     def _discoverIdsAfter(self, inputSet, lastId):
         """Discover logical ids above the current streaming watermark.
@@ -73,10 +91,10 @@ class CistemStreamingBase:
                                   producerClosed, watermarkAttr):
         """Recover late-visible ids, but only once the producer is closed.
 
-        A PostgreSQL-backed producer can declare itself closed while some
-        of its rows are not visible yet. Rescanning every poll to cover
-        that would defeat the watermark, so the full listing happens only
-        in this terminal reconciliation, and only while the declared size
+        A producer can declare itself closed while some of its rows are
+        not visible yet. Rescanning every poll to cover that would defeat
+        the watermark, so the full listing happens only in this terminal
+        reconciliation, and only while the declared size
         still exceeds what has actually been seen.
         """
         discoveredIds = list(discoveredIds)

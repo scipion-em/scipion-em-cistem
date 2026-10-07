@@ -95,6 +95,12 @@ class CistemProtCTFFind(CistemStreamingBase, ProtCTFMicrographs):
         self._restoreProcessedMicsFromPersistentState()
 
         while not self.finished:
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the run
+            # hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
             self._checkNewInput()
             self._checkNewOutput()
 
