@@ -25,12 +25,17 @@
 # **************************************************************************
 
 import os
+import time
+from collections import OrderedDict
+from datetime import datetime
 
+import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.constants import PROD
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
+import pwem.objects as emobj
 from pwem.constants import RELATION_CTF
 from pwem.protocols import ProtParticlePickingAuto
 from pwem import emlib
@@ -38,9 +43,12 @@ from pwem import emlib
 from cistem import Plugin
 from ..convert import readSetOfCoordinates, writeReferences
 from ..constants import LOW_VARIANCE, FIND_PARTICLES_BIN
+from .protocol_streaming_base import CistemStreamingBase
+
+PICKING_STEP_NAMES = ('pickMicrographStep', 'pickMicrographListStep')
 
 
-class CistemProtFindParticles(ProtParticlePickingAuto):
+class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
     """ Protocol to pick particles (ab-initio or reference-based) using cisTEM. """
     _label = 'find particles'
     _devStatus = PROD
@@ -151,17 +159,26 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
 
         self._defineStreamingParams(form)
 
-        form.addParallelSection(threads=1)
+        form.addParallelSection(threads=3)
 
     # -------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         self.inputStreaming = self.getInputMicrographs().isStreamOpen()
 
-        if self.streamingBatchSize > 0 or self.inputStreaming:
-            # If the input is in streaming, follow the base class policy
-            # about inserting new steps and discovery new input/output
-            self.createOutputStep = self._doNothing
-            ProtParticlePickingAuto._insertAllSteps(self)
+        if self.inputStreaming:
+            # The conversion step must be scheduled here, not from inside
+            # the generator: every picking step takes it as a prerequisite,
+            # and a step inserted by a running step is not one the executor
+            # has already planned around - the picking steps would wait on
+            # it forever and the generator would poll with nothing to do.
+            initialIds = self._insertInitialSteps()
+
+            self._insertFunctionStep(
+                self.resumableStepGeneratorStep,
+                str(datetime.now()),
+                prerequisites=initialIds,
+                needsGPU=False,
+            )
         else:
             # If not in streaming, then we will just insert a single step to
             # pick all micrographs at once since it is much faster
@@ -176,6 +193,51 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
             self._insertFinalSteps = self._doNothing
             self._stepsCheck = self._doNothing
 
+    def resumableStepGeneratorStep(self, timestamp):
+        """Run the streaming generator as a single resumable step."""
+        self.stepsGeneratorStep()
+
+    def stepsGeneratorStep(self):
+        """Discover, pick and publish micrographs incrementally."""
+        self.micDict = OrderedDict()
+        self._pendingMics = OrderedDict()
+        self._micsWithoutCtf = OrderedDict()
+        self._ctfByMicName = {}
+        self._knownMicIds = set()
+        self._knownCtfIds = set()
+        self._lastMicId = 0
+        self._lastCtfId = 0
+        self.streamClosed = False
+        self.finished = False
+        # The conversion step already ran before the generator started.
+        self.initialIds = []
+
+        self._restoreProcessedMicsFromPersistentState()
+
+        while not self.finished:
+            # A failed step makes the executor stop and then join every
+            # thread, this generator included: keep polling and the run
+            # hangs for good with nothing left to do.
+            if self._streamingMustStop():
+                break
+
+            self._checkNewInput()
+            self._checkNewOutput()
+
+            if self.finished:
+                break
+
+            sleepOnWait = self._getStreamingSleepOnWait()
+            if sleepOnWait > 0:
+                self._streamingSleepOnWait()
+            else:
+                time.sleep(1)
+
+    def _stepsCheck(self):
+        """Persist steps created by the generator without legacy polling."""
+        if getattr(self, '_newSteps', False):
+            self.updateSteps()
+
     def _insertInitialSteps(self):
         """ Convert the input micrographs to mrc. """
         inputRefs = self.getInputReferences()
@@ -188,48 +250,260 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
     def _doNothing(self, *args):
         pass  # used to avoid some streaming functions
 
-    def _loadInputList(self):
-        """ This function is re-implemented in this protocol, because it has
-         a SetOfCTF as input, so for streaming, we only want to report the
-         micrographs for which the CTF is ready.
+    def _loadSet(self, inputSet, SetClass, getKeyFunc, watermarkAttr,
+                 knownIds):
+        """Discover the items added to one input stream since the last poll.
+
+        Only ids above that stream's watermark are queried and only those
+        items are hydrated, so polling costs what just arrived rather than
+        everything the stream has produced so far.
         """
-        micDict, micClose = self._loadMics(self.getInputMicrographs())
-        ctfDict, ctfClosed = self._loadCTFs(self.ctfRelations.get())
+        self.debug("Discovering new items from the logical input set.")
 
-        # Keep the micrographs that have CTF
-        # and set the CTF property for those who have it
-        readyMics = dict()
+        newItems, producerClosed, terminalConsistent = (
+            self._discoverNewInputItems(inputSet, watermarkAttr, knownIds))
 
-        for micKey, mic in micDict.items():
-            if micKey in ctfDict:
-                mic.setCTF(ctfDict[micKey])
-                readyMics[micKey] = mic
+        newItemDict = OrderedDict()
 
-        # Return the updated micDict and the closed status
-        return readyMics, micClose and ctfClosed
+        for item in newItems:
+            itemId = item.getObjId()
+
+            if itemId in knownIds:
+                continue
+
+            knownIds.add(itemId)
+            newItemDict[getKeyFunc(item)] = item
+
+        return newItemDict, producerClosed and terminalConsistent
+
+    def _loadMics(self, micSet):
+        return self._loadSet(micSet, emobj.SetOfMicrographs,
+                             lambda mic: mic.getMicName(),
+                             '_lastMicId', self._knownMicIds)
+
+    def _loadCTFs(self, ctfSet):
+        return self._loadSet(ctfSet, emobj.SetOfCTF,
+                             lambda ctf: ctf.getMicrograph().getMicName(),
+                             '_lastCtfId', self._knownCtfIds)
+
+    def _loadInputList(self):
+        """Report the micrographs whose CTF has arrived.
+
+        Both inputs are streams that advance independently, so each keeps
+        its own watermark and whatever has no counterpart yet waits in a
+        pending map. That map is the only thing re-examined per poll - a
+        micrograph is never looked up in the input Set twice.
+        """
+        gapIds = getattr(self, '_resumeGapIds', None)
+
+        if gapIds:
+            micSet = self.getInputMicrographs()
+
+            for mic in self._loadLogicalSetItemsByIds(micSet, gapIds):
+                self._knownMicIds.add(mic.getObjId())
+                self._micsWithoutCtf[mic.getMicName()] = mic
+
+            self._resumeGapIds = set()
+
+        newMics, micClosed = self._loadMics(self.getInputMicrographs())
+        newCtfs, ctfClosed = self._loadCTFs(self.ctfRelations.get())
+
+        self._micsWithoutCtf.update(newMics)
+
+        for micKey, ctf in newCtfs.items():
+            self._ctfByMicName[micKey] = ctf
+
+        readyMics = OrderedDict()
+
+        for micKey in list(self._micsWithoutCtf):
+            ctf = self._ctfByMicName.pop(micKey, None)
+
+            if ctf is None:
+                continue
+
+            mic = self._micsWithoutCtf.pop(micKey)
+            mic.setCTF(ctf)
+            readyMics[micKey] = mic
+
+        if readyMics:
+            scheduledNames = self._getScheduledPickingMicNames()
+
+            for micKey in list(readyMics):
+                if micKey in scheduledNames:
+                    # Already has a step from an earlier run: it only needs
+                    # publishing, so it must not be scheduled a second time.
+                    self.micDict[micKey] = readyMics.pop(micKey)
+
+        self._pendingMics.update(readyMics)
+
+        return OrderedDict(self._pendingMics), micClosed and ctfClosed
+
+    def _checkNewInput(self):
+        """Discover ready micrographs directly from logical input Sets."""
+        micDict, self.streamClosed = self._loadInputList()
+        newMics = list(micDict.values())
+
+        if newMics:
+            self._insertNewMicsSteps(newMics)
+
+            # pwem only takes whole batches; whatever it left out has to be
+            # offered again, because discovery will not find it twice.
+            for mic in newMics:
+                if mic.getMicName() in self.micDict:
+                    self._pendingMics.pop(mic.getMicName(), None)
+
+            self.updateSteps()
+
+    def _getFinishedPickingMicNames(self):
+        """Return mic names represented by finished picking steps."""
+        return self._collectStepArgKeys(PICKING_STEP_NAMES, keyType=str)
+
+    def _getScheduledPickingMicNames(self):
+        """Return mic names represented by persisted picking steps."""
+        return self._collectStepArgKeys(PICKING_STEP_NAMES,
+                                        onlyFinished=False, keyType=str)
+
+    def _restoreProcessedMicsFromPersistentState(self):
+        """Place the watermarks past what a previous run already handled.
+
+        Coordinates carry the id of their micrograph, so the output Set
+        says which micrographs were picked, and the step graph covers the
+        ones that produced no coordinate at all. Discovery restarts above
+        that, and anything below it that was never handled comes back as a
+        gap rather than being walked for again on every poll.
+        """
+        self._lastMicId = getattr(self, '_lastMicId', 0)
+
+        pickedMicIds = self._getPublishedPickingMicIds()
+
+        if not pickedMicIds:
+            return
+
+        watermark, gapIds = self._resumeWatermarkWithGaps(
+            self.getInputMicrographs(), pickedMicIds)
+
+        self._lastMicId = max(self._lastMicId, watermark)
+        self._knownMicIds.update(pickedMicIds)
+        self._resumeGapIds = gapIds
+
+    def _getPublishedPickingMicIds(self):
+        """Micrograph ids already represented in the output coordinates.
+
+        This is an id query on the output, not a walk over it, and it only
+        runs once per execution.
+        """
+        micIds = self._getOutputUniqueValues(
+            getattr(self, 'outputCoordinates', None), '_micId')
+
+        if micIds is None:
+            return set()
+
+        return micIds
+
+    def _checkNewOutput(self):
+        """Publish finished picking steps without DONE sidecars."""
+        if getattr(self, 'finished', False):
+            return
+
+        finishedNames = self._getFinishedPickingMicNames()
+
+        # micDict holds what has been scheduled and not published yet, so
+        # only that has to be looked at - never every micrograph seen.
+        newDone = [
+            mic for micName, mic in self.micDict.items()
+            if micName in finishedNames
+        ]
+
+        allDone = (len(newDone) == len(self.micDict)
+                   and not self._pendingMics
+                   and not self._micsWithoutCtf)
+        self.finished = self.streamClosed and allDone
+        streamMode = pwobj.Set.STREAM_CLOSED if self.finished else pwobj.Set.STREAM_OPEN
+
+        if newDone:
+            self._updateOutputCoordSet(newDone, streamMode)
+
+            for mic in newDone:
+                self.micDict.pop(mic.getMicName(), None)
+        elif not self.finished:
+            if allDone:
+                self._streamingSleepOnWait()
+            return
+
+        if self.finished:
+            self._updateStreamState(streamMode)
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self, micsId, refsId):
-        """ Match ctf information against the micrographs. """
+        """ Build the CTF lookup used as a fallback for non-streaming
+        picking (those micrographs never go through _loadInputList, so
+        they never get a CTF attached via mic.setCTF()), and convert
+        whatever micrographs are already available.
+
+        This step only runs once, near the start of the protocol, but
+        a streaming input Set keeps growing afterwards - a micrograph
+        (and its CTF) that arrives later would never be covered by this
+        snapshot. _pickMicrographStep therefore also converts lazily,
+        per micrograph, and prefers the always-fresh mic.getCTF()
+        (kept current by _loadInputList on every poll) over this
+        one-shot dict.
+        """
         self.ctfDict = {}
-        if self.ctfRelations.get() is not None:
+
+        # Only the non-streaming path ever reads this: while streaming,
+        # every micrograph reaching a picking step already carries the CTF
+        # _loadInputList attached to it. Building it anyway would walk the
+        # whole CTF Set and hold a clone of every entry for the rest of
+        # the run, for something nothing reads.
+        if not self.inputStreaming and self.ctfRelations.get() is not None:
             for ctf in self.ctfRelations.get():
                 self.ctfDict[ctf.getMicrograph().getMicName()] = ctf.clone()
 
-        ih = emlib.image.ImageHandler()
         for mic in self.getInputMicrographs():
-            micName = mic.getFileName()
-            # We convert the input micrographs if they are not .mrc
-            outMic = os.path.join(self._getTmpPath(),
-                                  pwutils.replaceBaseExt(micName, 'mrc'))
-            if micName.endswith('.mrc'):
-                pwutils.createAbsLink(os.path.abspath(micName), outMic)
-            else:
-                ih.convert(micName, outMic, emlib.DT_FLOAT)
+            self._convertMic(mic)
 
         if refsId is not None:
             writeReferences(self.getInputReferences(),
                             self._getExtraPath('references.mrc'))
+
+    def _convertMic(self, mic):
+        """ Convert a micrograph to mrc in the tmp dir, if that has not
+        already been done. Idempotent, so it is safe to call again for
+        a micrograph convertInputStep already converted. """
+        micName = mic.getFileName()
+        outMic = os.path.join(self._getTmpPath(),
+                              pwutils.replaceBaseExt(micName, 'mrc'))
+        if not os.path.exists(outMic):
+            if micName.endswith('.mrc'):
+                pwutils.createAbsLink(os.path.abspath(micName), outMic)
+            else:
+                ih = emlib.image.ImageHandler()
+                ih.convert(micName, outMic, emlib.DT_FLOAT)
+        return outMic
+
+    def _getMicCtf(self, mic):
+        """ CTF for a micrograph reaching the picking step. Streaming
+        input already has it attached (kept fresh by _loadInputList on
+        every poll); non-streaming input never goes through
+        _loadInputList, so fall back to the snapshot built once in
+        convertInputStep. """
+        ctf = mic.getCTF()
+        if ctf is None:
+            ctf = self.ctfDict.get(mic.getMicName())
+        return ctf
+
+    def pickMicrographStep(self, micName, *args):
+        """Pick one micrograph without filesystem completion sidecars."""
+        mic = self.micDict[micName]
+        self.info("Picking micrograph: %s " % mic.getFileName())
+        self._pickMicrograph(mic, *args)
+
+    def pickMicrographListStep(self, micNameList, *args):
+        """Pick a batch of micrographs without completion sidecars."""
+        micList = [self.micDict[micName] for micName in micNameList]
+        for mic in micList:
+            self.info("Picking micrograph: %s " % mic.getFileName())
+        self._pickMicrographList(micList, *args)
 
     def _pickMicrograph(self, mic, *args):
         self._pickMicrographStep([mic], *args)
@@ -243,31 +517,33 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         :param args: programs args
         """
         for mic in mics:
-            micName = mic.getFileName()
-            outMic = os.path.join(self._getTmpPath(),
-                                  pwutils.replaceBaseExt(micName, 'mrc'))
-            ctf = self.ctfDict[mic.getMicName()]
-
-            args.update({'micName': outMic,
-                         'logFn': self._getLogFn(mic),
-                         'outStack': self._getStackFn(mic),
-                         'phaseShift': ctf.getPhaseShift() or 0.0,
-                         'defocusU': ctf.getDefocusU(),
-                         'defocusV': ctf.getDefocusV(),
-                         'defocusAngle': ctf.getDefocusAngle()
-                         })
-
-            if self.pickType == 1:
-                args.update({
-                    'refsFn': self._getExtraPath('references.mrc'),
-                    'useRadAvg': 'YES' if self.useRadAvg else 'NO',
-                    'rotateRef': self.rotateRef.get(),
-                })
-
-            argsStr = self._getArgsStr()
-            cmdArgs = argsStr % args
-
             try:
+                outMic = self._convertMic(mic)
+                ctf = self._getMicCtf(mic)
+                if ctf is None:
+                    raise Exception(
+                        "No CTF available for micrograph %s"
+                        % mic.getMicName())
+
+                args.update({'micName': outMic,
+                             'logFn': self._getLogFn(mic),
+                             'outStack': self._getStackFn(mic),
+                             'phaseShift': ctf.getPhaseShift() or 0.0,
+                             'defocusU': ctf.getDefocusU(),
+                             'defocusV': ctf.getDefocusV(),
+                             'defocusAngle': ctf.getDefocusAngle()
+                             })
+
+                if self.pickType == 1:
+                    args.update({
+                        'refsFn': self._getExtraPath('references.mrc'),
+                        'useRadAvg': 'YES' if self.useRadAvg else 'NO',
+                        'rotateRef': self.rotateRef.get(),
+                    })
+
+                argsStr = self._getArgsStr()
+                cmdArgs = argsStr % args
+
                 self.runJob(self._getProgram(), cmdArgs,
                             env=Plugin.getEnviron())
 
@@ -281,7 +557,8 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
                 pwutils.cleanPath(self._getStackFn(mic))
             except Exception as e:
                 self.error("ERROR: Picking has failed for %s. %s" % (
-                    outMic, self._getErrorFromPickerTxt(mic, e)))
+                    mic.getMicName(), self._getErrorFromPickerTxt(mic, e)))
+                self._writeFailedList([mic])
 
     def _getErrorFromPickerTxt(self, mic, e):
         """ Parse output log for errors.
@@ -289,10 +566,13 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         :return: the error string
         """
         file = self._getLogFn(mic)
-        with open(file, "r") as fh:
-            for line in fh.readlines():
-                if line.startswith("Error"):
-                    return line.replace("Error:", "")
+        try:
+            with open(file, "r") as fh:
+                for line in fh.readlines():
+                    if line.startswith("Error"):
+                        return line.replace("Error:", "")
+        except OSError:
+            pass
         return e
 
     def createOutputStep(self):
@@ -306,6 +586,23 @@ class CistemProtFindParticles(ProtParticlePickingAuto):
         self._defineSourceRelation(self.inputMicrographs, coordSet)
 
     # --------------------------- INFO functions --------------------------------
+    def _validateStreamingThreads(self):
+        inputMics = self.getInputMicrographs()
+
+        if (inputMics is not None
+                and inputMics.isStreamOpen()
+                and self.numberOfThreads.get() < 3):
+            return [
+                'FindParticles streaming requires at least 3 threads.'
+            ]
+
+        return []
+
+    def _validate(self):
+        errors = ProtParticlePickingAuto._validate(self)
+        errors.extend(self._validateStreamingThreads())
+        return errors
+
     def _summary(self):
         summary = list()
         summary.append("Number of input micrographs: %d"
@@ -481,6 +778,31 @@ eof"""
         micName = mic.getFileName()
         return os.path.join(self._getExtraPath(),
                             pwutils.replaceBaseExt(micName, 'plt'))
+
+    def _getAllFailed(self):
+        return self._getExtraPath('FAILED_all.TXT')
+
+    def _writeFailedList(self, micList):
+        """Record which micrographs the picker could not handle.
+
+        This is a report, not completion state: a micrograph that failed
+        produces no coordinates, which on its own is indistinguishable
+        from one that simply had no particles, so without this the only
+        trace of the failure is a log line.
+        """
+        with open(self._getAllFailed(), 'a') as handle:
+            for mic in micList:
+                handle.write('%d\n' % mic.getObjId())
+
+    def _readFailedList(self):
+        """Ids of the micrographs recorded as failed, if any."""
+        failedFile = self._getAllFailed()
+
+        if not os.path.exists(failedFile):
+            return []
+
+        with open(failedFile) as handle:
+            return [int(line.strip()) for line in handle if line.strip()]
 
     def getInputReferences(self):
         return self.inputRefs.get() if self.inputRefs.hasValue() else None
