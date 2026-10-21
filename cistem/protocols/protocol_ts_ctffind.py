@@ -40,12 +40,19 @@ import pyworkflow.utils as pwutils
 from pwem.objects import CTFModel
 from pwem import emlib
 
-from tomo.objects import CTFTomo, SetOfCTFTomoSeries, CTFTomoSeries
+from tomo.objects import CTFTomo, SetOfCTFTomoSeries, CTFTomoSeries, TiltSeries
 from tomo.protocols.protocol_ts_estimate_ctf import createCtfParams
 
 from cistem.protocols.program_ctffind import ProgramCtffind
 from cistem.convert import readCtfModelStack, parseCtffindOutput
 from cistem import Plugin
+from cistem.protocols.protocol_ctffind import isUsableCtf
+
+# The steps return one file here as their result file. On Continue, pyworkflow keeps a finished step
+# finished only while its result files exist, so removing the ones of a tilt series that failed makes its
+# steps run again.
+STEP_RESULTS_DIR = 'STEP_RESULTS'
+TS_STEPS = ('convert', 'process', 'output')
 
 
 MRCS_EXT = ".mrcs"
@@ -157,6 +164,7 @@ class CistemProtTsCtffind(EMProtocol):
     # --------------------------- STEPS functions -----------------------------
     def _insertAllSteps(self):
         self._initialize()
+        self._prepareFailedForRetry()
         pIdList = []
         for mdObj in self.tsCtfMdList:
             pidConvert = self._insertFunctionStep(self.convertInputStep,
@@ -188,14 +196,18 @@ class CistemProtTsCtffind(EMProtocol):
             )
             self.tsCtfMdList.append(md)
 
-    @staticmethod
-    def convertInputStep(mdObj):
+    def convertInputStep(self, mdObj):
         tsInputFn = mdObj.ts.getFirstItem().getFileName()
-        if pwutils.getExt(tsInputFn) in ['.mrc', '.st', MRCS_EXT]:
-            pwutils.createAbsLink(os.path.abspath(tsInputFn), mdObj.tsFn)
-        else:
-            ih = emlib.image.ImageHandler()
-            ih.convert(tsInputFn, mdObj.tsFn, emlib.DT_FLOAT)
+        try:
+            if pwutils.getExt(tsInputFn) in ['.mrc', '.st', MRCS_EXT]:
+                pwutils.createAbsLink(os.path.abspath(tsInputFn), mdObj.tsFn)
+            else:
+                ih = emlib.image.ImageHandler()
+                ih.convert(tsInputFn, mdObj.tsFn, emlib.DT_FLOAT)
+        except Exception as e:
+            # Not raised: the step would fail and take the whole run with it
+            self.error(f"ERROR: Converting {tsInputFn} has failed: {e}")
+        return self._stepResultFile('convert', mdObj)
 
     def processTiltSeriesStep(self, mdObj):
         """ Run ctffind on a whole TS stack at once. """
@@ -209,10 +221,52 @@ class CistemProtTsCtffind(EMProtocol):
             self.runJob(program, args)
         except Exception as e:
             self.error(f"ERROR: Ctffind has failed for {mdObj.tsFn}: {e}")
+        return self._stepResultFile('process', mdObj)
 
     def createOutputStep(self, mdObj):
+        self._createOutput(mdObj)
+        return self._stepResultFile('output', mdObj)
+
+    def _readTsCtfs(self, mdObj):
+        """ The CTF of every tilt image of the tilt series, or None when ctffind gave no usable result for it.
+
+        Read in full before anything is published, so a tilt series is published whole or not at all. """
+        ts = mdObj.ts
+        try:
+            ctfResult = parseCtffindOutput(mdObj.outputLog)
+            avrotResult = parseCtffindOutput(mdObj.outputRotAvg, avrot=True)
+            if ctfResult is None:
+                return None
+            ctf = CTFModel()
+            ctfTomos = []
+            for i, tiltImage in enumerate(ts.iterItems()):
+                ctfTomo = self._getCtfTi(ctf, ctfResult, avrotResult, i, mdObj.outputPsd)
+                ctfTomo.setIndex(tiltImage.getIndex())
+                ctfTomo.setAcquisitionOrder(tiltImage.getAcquisitionOrder())
+                ctfTomos.append(ctfTomo)
+        except Exception as e:
+            self.error(f"ERROR: The CTF of {ts.getTsId()} could not be read: {e}")
+            return None
+        # Some tilt images without a CTF are kept as they were; none at all is a failure
+        if not any(isUsableCtf(ctfTomo) for ctfTomo in ctfTomos):
+            return None
+        return ctfTomos
+
+    def _createOutput(self, mdObj):
+        ts = mdObj.ts
+        tsId = ts.getTsId()
+        ctfTomos = self._readTsCtfs(mdObj)
+        if ctfTomos is None:
+            # Not published: Continue estimates it again
+            self.error(f"ERROR: No CTF was estimated for {tsId}; it is left out.")
+            self._failedTsIds().add(tsId)
+            return
+
         with self._lock:
             outCtfSet = self.getOutputCtfTomoSet()
+            if outCtfSet is not None and tsId in set(outCtfSet.getUniqueValues(TiltSeries.TS_ID_FIELD)):
+                # Published by a previous execution of this step, e.g. before a Continue
+                return
 
             if outCtfSet:
                 outCtfSet.enableAppend()
@@ -224,24 +278,15 @@ class CistemProtTsCtffind(EMProtocol):
                 self._defineOutputs(**{self._possibleOutputs.CTFs.name: outCtfSet})
                 self._defineSourceRelation(self.inTsSet, outCtfSet)
 
-            ts = mdObj.ts
-
             # Generate the current CTF tomo series item
-            newCTFTomoSeries = CTFTomoSeries(tsId=ts.getTsId(),
+            newCTFTomoSeries = CTFTomoSeries(tsId=tsId,
                                              tiltSeriesPointer=ts)
             newCTFTomoSeries.copyInfo(ts)
             newCTFTomoSeries.setObjId(ts.getObjId())
             outCtfSet.append(newCTFTomoSeries)
 
-            # Generate the ti CTF and populate the corresponding CTF tomo series
-            ctfResult = parseCtffindOutput(mdObj.outputLog)
-            avrotResult = parseCtffindOutput(mdObj.outputRotAvg, avrot=True)
-            ctf = CTFModel()
-            for i, tiltImage in enumerate(ts.iterItems()):
-                ctfTomo = self._getCtfTi(ctf, ctfResult, avrotResult, i, mdObj.outputPsd)
-                ctfTomo.setIndex(tiltImage.getIndex())
-                ctfTomo.setAcquisitionOrder(tiltImage.getAcquisitionOrder())
-                tiltImage.setCTF(ctfTomo)
+            # Populate the CTF tomo series with the CTFs already read
+            for ctfTomo in ctfTomos:
                 newCTFTomoSeries.append(ctfTomo)
 
             outCtfSet.update(newCTFTomoSeries)
@@ -249,7 +294,44 @@ class CistemProtTsCtffind(EMProtocol):
         self._store()
 
     def closeStep(self):
+        # Closed in any case: an open output keeps its consumers waiting
         self._closeOutputSet()
+        outCtfSet = self.getOutputCtfTomoSet()
+        if self._failedTsIds() and (outCtfSet is None or len(outCtfSet) == 0):
+            raise Exception("Ctffind failed for every one of the %d tilt series; see the errors above. "
+                            "Continue estimates them again." % len(self._failedTsIds()))
+        return self._stepResultFile('close')
+
+    # --------------------------- Continue -----------------------------------
+    def _failedTsIds(self):
+        """ The tilt series of this execution with no usable CTF: in no output. """
+        return self.__dict__.setdefault('_failedTsIdsSet', set())
+
+    def _stepResultPath(self, name):
+        return self._getExtraPath(STEP_RESULTS_DIR, '%s.TXT' % name)
+
+    def _stepResultFile(self, kind, mdObj=None):
+        """ The result file of a step: Continue runs the step again once it is removed. """
+        pwutils.makePath(self._getExtraPath(STEP_RESULTS_DIR))
+        path = self._stepResultPath('%s_%s' % (kind, mdObj.ts.getTsId()) if mdObj else kind)
+        open(path, 'a').close()
+        return path
+
+    def _prepareFailedForRetry(self):
+        """ Have Continue estimate again the tilt series that failed (or were never published).
+
+        pyworkflow does not run a finished step again, so their steps, and the closing one, lose their
+        result files. """
+        outCtfSet = self.getOutputCtfTomoSet()
+        publishedTsIds = set(outCtfSet.getUniqueValues(TiltSeries.TS_ID_FIELD)) if outCtfSet else set()
+        retried = [mdObj.ts.getTsId() for mdObj in self.tsCtfMdList
+                   if mdObj.ts.getTsId() not in publishedTsIds
+                   and any(os.path.exists(self._stepResultPath('%s_%s' % (kind, mdObj.ts.getTsId())))
+                           for kind in TS_STEPS)]
+        for tsId in retried:
+            pwutils.cleanPath(*[self._stepResultPath('%s_%s' % (kind, tsId)) for kind in TS_STEPS])
+        if retried:
+            pwutils.cleanPath(self._stepResultPath('close'))
 
     def allowsDelete(self, obj):
         return True
