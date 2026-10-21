@@ -312,7 +312,8 @@ class TestTerminalInconsistencyDoesNotHangForever(unittest.TestCase):
         harness.poll(inputSet)
 
         self.assertEqual(
-            harness._terminalStallCount,
+            harness.__dict__.get('_terminalStallCounts', {}).get(
+                '_lastInputId', 0),
             0,
             "The view did become consistent; nothing is stalled.",
         )

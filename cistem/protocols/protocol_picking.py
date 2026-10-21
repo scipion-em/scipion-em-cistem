@@ -41,7 +41,7 @@ from pwem.protocols import ProtParticlePickingAuto
 from pwem import emlib
 
 from cistem import Plugin
-from ..convert import readSetOfCoordinates, writeReferences
+from ..convert import readCoordinates, writeReferences
 from ..constants import LOW_VARIANCE, FIND_PARTICLES_BIN
 from .protocol_streaming_base import CistemStreamingBase
 
@@ -326,13 +326,8 @@ class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
             readyMics[micKey] = mic
 
         if readyMics:
-            scheduledNames = self._getScheduledPickingMicNames()
-
-            for micKey in list(readyMics):
-                if micKey in scheduledNames:
-                    # Already has a step from an earlier run: it only needs
-                    # publishing, so it must not be scheduled a second time.
-                    self.micDict[micKey] = readyMics.pop(micKey)
+            self._takeAlreadyPickedMics(readyMics,
+                                        self._getScheduledPickingMicNames())
 
         self._pendingMics.update(readyMics)
 
@@ -354,14 +349,63 @@ class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
 
             self.updateSteps()
 
+    def _takeAlreadyPickedMics(self, readyMics, scheduledNames):
+        """Move to micDict the ready micrographs an earlier step picked.
+
+        Those only need publishing, so they must not be scheduled a second
+        time - unless their picking failed: then they stay in
+        ``readyMics`` to be picked again, and stop being listed as failed.
+        """
+        failedIds = None
+        retriedIds = set()
+
+        for micKey in list(readyMics):
+            if micKey not in scheduledNames:
+                continue
+
+            if failedIds is None:
+                # Read only when an earlier step exists, not on every poll.
+                failedIds = set(self._readFailedList())
+
+            micId = readyMics[micKey].getObjId()
+
+            if micId in failedIds:
+                retriedIds.add(micId)
+                self._retriedMicNames = getattr(
+                    self, '_retriedMicNames', set())
+                self._retriedMicNames.add(micKey)
+            else:
+                self.micDict[micKey] = readyMics.pop(micKey)
+
+        if retriedIds:
+            self._forgetFailedMics(retriedIds)
+
     def _getFinishedPickingMicNames(self):
-        """Return mic names represented by finished picking steps."""
-        return self._collectStepArgKeys(PICKING_STEP_NAMES, keyType=str)
+        """Return mic names represented by finished picking steps.
+
+        A micrograph picked again in this run (it failed before) only
+        counts once its new step has finished: its old step finished too.
+        """
+        finished = self._collectStepArgKeys(PICKING_STEP_NAMES, keyType=str)
+        retried = getattr(self, '_retriedMicNames', None)
+
+        if retried:
+            finishedNow = self._collectStepArgKeys(
+                PICKING_STEP_NAMES, keyType=str, includePrevious=False)
+            finished = {name for name in finished
+                        if name not in retried or name in finishedNow}
+
+        return finished
 
     def _getScheduledPickingMicNames(self):
         """Return mic names represented by persisted picking steps."""
         return self._collectStepArgKeys(PICKING_STEP_NAMES,
                                         onlyFinished=False, keyType=str)
+
+    def _hasActiveStreamingWork(self):
+        """Micrographs scheduled or waiting for a batch, not yet published."""
+        return bool(getattr(self, 'micDict', None)
+                    or getattr(self, '_pendingMics', None))
 
     def _restoreProcessedMicsFromPersistentState(self):
         """Place the watermarks past what a previous run already handled.
@@ -432,6 +476,17 @@ class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
 
         if self.finished:
             self._updateStreamState(streamMode)
+            self._failIfEveryMicrographFailed()
+
+    def _failIfEveryMicrographFailed(self):
+        """A micrograph without particles is not a failure, so this goes by
+        the failed list; the run fails only when every micrograph is in it."""
+        knownIds = getattr(self, '_knownMicIds', None)
+
+        if knownIds and set(knownIds) <= set(self._readFailedList()):
+            raise Exception("Picking failed for every one of the %d "
+                            "micrographs; see the errors above. Continue "
+                            "picks them again." % len(knownIds))
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self, micsId, refsId):
@@ -471,8 +526,10 @@ class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
         already been done. Idempotent, so it is safe to call again for
         a micrograph convertInputStep already converted. """
         micName = mic.getFileName()
-        outMic = os.path.join(self._getTmpPath(),
-                              pwutils.replaceBaseExt(micName, 'mrc'))
+        # Scoped by id: same-named micrographs from different folders
+        # would otherwise be converted on top of each other.
+        outMic = self._getTmpPath('%06d__%s' % (
+            mic.getObjId(), pwutils.replaceBaseExt(micName, 'mrc')))
         if not os.path.exists(outMic):
             if micName.endswith('.mrc'):
                 pwutils.createAbsLink(os.path.abspath(micName), outMic)
@@ -755,7 +812,10 @@ eof"""
         if coordSet.getBoxSize() is None:
             coordSet.setBoxSize(128)
 
-        readSetOfCoordinates(self._getExtraPath(), micList, coordSet)
+        # Each micrograph from its own file: same-named micrographs from
+        # different folders have different ones.
+        for mic in micList:
+            readCoordinates(mic, self._getPltFn(mic), coordSet)
 
     def _getMicrographDir(self, mic):
         """ Return an unique dir name for results of the micrograph. """
@@ -767,17 +827,16 @@ eof"""
     def _getLogFn(self, mic):
         """ Return output log file. """
         micName = mic.getFileName()
-        return os.path.join(self._getTmpPath(),
-                            pwutils.replaceBaseExt(micName, 'log'))
+        return self._getTmpPath('%06d__%s' % (
+            mic.getObjId(), pwutils.replaceBaseExt(micName, 'log')))
 
     def _getStackFn(self, mic):
         return self._getTmpPath('mic_%06d.mrc' % mic.getObjId())
 
     def _getPltFn(self, mic):
         """ Return output plt coords file. """
-        micName = mic.getFileName()
-        return os.path.join(self._getExtraPath(),
-                            pwutils.replaceBaseExt(micName, 'plt'))
+        return self._itemScopedPath(
+            mic, pwutils.replaceBaseExt(mic.getFileName(), 'plt'))
 
     def _getAllFailed(self):
         return self._getExtraPath('FAILED_all.TXT')
@@ -793,6 +852,14 @@ eof"""
         with open(self._getAllFailed(), 'a') as handle:
             for mic in micList:
                 handle.write('%d\n' % mic.getObjId())
+
+    def _forgetFailedMics(self, micIds):
+        """Stop listing micrographs as failed: they are being picked again."""
+        remaining = [micId for micId in self._readFailedList()
+                     if micId not in micIds]
+
+        with open(self._getAllFailed(), 'w') as handle:
+            handle.writelines('%d\n' % micId for micId in remaining)
 
     def _readFailedList(self):
         """Ids of the micrographs recorded as failed, if any."""

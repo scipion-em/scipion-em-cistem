@@ -47,6 +47,14 @@ from .protocol_streaming_base import CistemStreamingBase
 CTF_STEP_NAMES = ('estimateCtfStep', 'estimateCtfListStep')
 
 
+def isUsableCtf(ctfModel):
+    """False for the -999 placeholder of a failed or missing result."""
+    defocusU, defocusV = ctfModel.getDefocusU(), ctfModel.getDefocusV()
+
+    return (defocusU is not None and defocusV is not None
+            and defocusU >= 0 and defocusV >= 0)
+
+
 class CistemProtCTFFind(CistemStreamingBase, ProtCTFMicrographs):
     """ Estimate CTF for a set of micrographs with ctffind.
     
@@ -222,12 +230,31 @@ class CistemProtCTFFind(CistemStreamingBase, ProtCTFMicrographs):
         self._doCtfEstimation(mic)
 
     def _getFinishedCtfMicNames(self):
-        """Return micrographs represented by finished CTF processing steps."""
-        return self._collectStepArgKeys(CTF_STEP_NAMES)
+        """Return micrographs represented by finished CTF processing steps.
+
+        A micrograph estimated again in this run (its earlier result was
+        unusable) only counts once its new step has finished: its old step
+        finished too, and publishing on that would drop it once more.
+        """
+        finished = self._collectStepArgKeys(CTF_STEP_NAMES)
+        retried = getattr(self, '_retriedMicNames', None)
+
+        if retried:
+            finishedNow = self._collectStepArgKeys(CTF_STEP_NAMES,
+                                                   includePrevious=False)
+            finished = {name for name in finished
+                        if name not in retried or name in finishedNow}
+
+        return finished
 
     def _getScheduledCtfMicNames(self):
         """Return micrographs represented by persisted CTF steps."""
         return self._collectStepArgKeys(CTF_STEP_NAMES, onlyFinished=False)
+
+    def _hasActiveStreamingWork(self):
+        """Micrographs scheduled or waiting for a batch, not yet published."""
+        return bool(getattr(self, 'micDict', None)
+                    or getattr(self, '_pendingMics', None))
 
     def _restoreProcessedMicsFromPersistentState(self):
         """Place the watermark past what a previous run already published.
@@ -299,6 +326,21 @@ class CistemProtCTFFind(CistemStreamingBase, ProtCTFMicrographs):
 
         if self.finished:
             self._updateStreamState(streamMode)
+            self._failIfNoCtfWasEstimated()
+
+    def _failIfNoCtfWasEstimated(self):
+        """A failed micrograph is left out, not published as -999; the run
+        fails only when that happened to every micrograph."""
+        if not getattr(self, '_knownMicIds', None):
+            return
+
+        output = getattr(self, 'outputCTF', None)
+
+        if output is None or output.getSize() == 0:
+            raise Exception("No CTF could be estimated for any of the %d "
+                            "micrographs; see the errors above. Continue "
+                            "estimates them again."
+                            % len(self._knownMicIds))
 
     def _checkNewInput(self):
         """Discover new micrographs from the logical Set.
@@ -372,10 +414,16 @@ class CistemProtCTFFind(CistemStreamingBase, ProtCTFMicrographs):
                 continue
 
             if itemKey in scheduledMicNames:
-                # Already has a step from an earlier run: it only needs
-                # publishing, so it must not be scheduled a second time.
-                self.micDict[itemKey] = item
-                continue
+                if self._ctfResultIsUsable(item):
+                    # Already estimated by an earlier run: it only needs
+                    # publishing, so it must not be scheduled a second time.
+                    self.micDict[itemKey] = item
+                    continue
+
+                # Its earlier estimation failed: estimate it again.
+                self._retriedMicNames = getattr(
+                    self, '_retriedMicNames', set())
+                self._retriedMicNames.add(itemKey)
 
             self._pendingMics[itemKey] = item
 
@@ -384,15 +432,34 @@ class CistemProtCTFFind(CistemStreamingBase, ProtCTFMicrographs):
         return OrderedDict(self._pendingMics), streamClosed
 
     def _createCtfModel(self, mic, updateSampling=False):
-        """ Redefined func from the base class. """
+        """ Redefined func from the base class.
+
+        A missing or unusable result raises instead of becoming a -999 CTF:
+        pwem then leaves the micrograph out of the output and lists it as
+        failed. ctffind's text output is kept: it is what tells, on a
+        Continue, whether this micrograph was estimated.
+        """
         psd = self._getPsdPath(mic)
         ctfModel = self._ctfProgram.parseOutputAsCtf(self._getCtfOutPath(mic),
                                                      self._getCtfAvrotPath(mic),
                                                      psdFile=psd)
+
+        if not isUsableCtf(ctfModel):
+            raise ValueError("No usable CTF estimation for micrograph %s"
+                             % mic.getObjId())
+
         ctfModel.setMicrograph(mic)
-        pwutils.cleanPath(self._getCtfOutPath(mic))
 
         return ctfModel
+
+    def _ctfResultIsUsable(self, mic):
+        """Whether an earlier run left a usable estimation for ``mic``."""
+        try:
+            self._createCtfModel(mic.clone())
+        except Exception:
+            return False
+
+        return True
 
     def _createOutputStep(self):
         """ Do nothing in streaming case. """
@@ -454,8 +521,8 @@ class CistemProtCTFFind(CistemStreamingBase, ProtCTFMicrographs):
         :param mic: input mic object
         :param suffix: file extension
         """
-        return self._getExtraPath(pwutils.removeBaseExt(os.path.basename(
-            mic.getFileName())) + '_' + suffix)
+        return self._itemScopedPath(mic, pwutils.removeBaseExt(
+            os.path.basename(mic.getFileName())) + '_' + suffix)
 
     def _getPsdPath(self, mic):
         return self._getMicExtra(mic, 'ctf.mrc')

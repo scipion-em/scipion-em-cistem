@@ -360,6 +360,10 @@ class CistemProtUnblur(CistemStreamingBase, ProtAlignMovies):
 
         return publishedIds
 
+    def _hasActiveStreamingWork(self):
+        """Movies discovered and not yet published."""
+        return bool(getattr(self, '_pendingMovies', None))
+
     def _getScheduledMovieIds(self):
         """Return movie ids represented by persisted processMovieStep steps."""
         return self._collectStepArgKeys(('processMovieStep',),
@@ -380,7 +384,8 @@ class CistemProtUnblur(CistemStreamingBase, ProtAlignMovies):
         self._discoveredMovieCount = getattr(self, '_discoveredMovieCount', 0)
 
         publishedIds = self._getPublishedMovieIds()
-        restoredIds = publishedIds | self._getScheduledMovieIds()
+        scheduledIds = self._getScheduledMovieIds()
+        restoredIds = publishedIds | scheduledIds
 
         self._publishedAnyOutput = bool(publishedIds)
 
@@ -400,10 +405,52 @@ class CistemProtUnblur(CistemStreamingBase, ProtAlignMovies):
         # be picked up; discovery itself will not look that far back again.
         self._resumeGapIds = gapIds
 
+        # Processed by an earlier run but never published. Their steps will
+        # not run again, and only movies waiting in _pendingMovies are ever
+        # published: the ones whose results are there only need publishing,
+        # the ones that failed are aligned again.
+        for movie in self._loadLogicalSetItemsByIds(
+                self.inputMovies.get(), scheduledIds - publishedIds):
+            movieId = movie.getObjId()
+            self._pendingMovies[movieId] = movie
+
+            if not self._movieResultExists(movie):
+                self.insertedDict.pop(movieId, None)
+                self._retriedMovieIds = getattr(self, '_retriedMovieIds',
+                                                set())
+                self._retriedMovieIds.add(movieId)
+
     def _getFinishedMovieIds(self):
-        """Return movie ids represented by finished processMovieStep steps."""
-        return self._collectStepArgKeys(('processMovieStep',),
-                                        dictField='object.id')
+        """Return movie ids represented by finished processMovieStep steps.
+
+        A movie aligned again in this run (it failed before) only counts
+        once its new step has finished: its old step finished too.
+        """
+        finished = self._collectStepArgKeys(('processMovieStep',),
+                                            dictField='object.id')
+        retried = getattr(self, '_retriedMovieIds', None)
+
+        if retried:
+            finishedNow = self._collectStepArgKeys(
+                ('processMovieStep',), dictField='object.id',
+                includePrevious=False)
+            finished = {movieId for movieId in finished
+                        if movieId not in retried or movieId in finishedNow}
+
+        return finished
+
+    def _movieResultExists(self, movie):
+        """Whether the files every enabled output is built from are there."""
+        names = []
+
+        if self._createOutputMovies():
+            names.append(self._getOutputMovieName(movie))
+        if self._createOutputMicrographs():
+            names.append(self._getOutputMicName(movie))
+        if self._createOutputWeightedMicrographs():
+            names.append(self._getOutputMicWtName(movie))
+
+        return all(os.path.exists(self._getExtraPath(name)) for name in names)
 
     def _checkNewOutput(self):
         """Publish finished movies without filesystem completion markers."""

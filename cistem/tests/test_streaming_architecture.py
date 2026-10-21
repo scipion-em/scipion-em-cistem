@@ -589,6 +589,13 @@ class _CtffindResumeHarness(CistemStreamingBase):
     def _insertInitialSteps(self):
         return []
 
+    def _ctfResultIsUsable(self, mic):
+        # What an earlier run estimated is usable unless a test says not.
+        return True
+
+    def _failIfNoCtfWasEstimated(self):
+        return CistemProtCTFFind._failIfNoCtfWasEstimated(self)
+
     def __init__(
             self,
             inputSet,
@@ -811,6 +818,7 @@ class _CtffindResumePublishHarness(
                 for mic in micList
             ]
         )
+        self.outputCTF.addItems([_PublishedCtf(mic) for mic in micList])
 
         return micList
 
@@ -1251,6 +1259,9 @@ class _FinishedResumeMovieStep:
 
 
 class _UnblurResumeStateHarness(CistemStreamingBase):
+    def _movieResultExists(self, movie):
+        return True
+
     def __init__(self):
         self.insertedDict = {}
         self._steps = [
@@ -1551,6 +1562,11 @@ class TestCistemFindParticlesStreamingCompletion(unittest.TestCase):
 
 
 class _FindParticlesEmptyCoordHarness(CistemStreamingBase):
+    _takeAlreadyPickedMics = CistemProtFindParticles._takeAlreadyPickedMics
+
+    def _readFailedList(self):
+        return []
+
     """A micrograph that was picked but yielded no coordinate at all."""
 
     def __init__(self):
@@ -1849,6 +1865,11 @@ class _LogicalCoordinateOutput(LogicalSetFake):
 
 
 class _FindParticlesResumeHarness(CistemStreamingBase):
+    _takeAlreadyPickedMics = CistemProtFindParticles._takeAlreadyPickedMics
+
+    def _readFailedList(self):
+        return []
+
     def __init__(self):
         self.micDict = OrderedDict()
         self._pendingMics = OrderedDict()

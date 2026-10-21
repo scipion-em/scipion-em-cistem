@@ -408,7 +408,9 @@ class TestCistemStreamingRegression(unittest.TestCase):
             protocol = _PickingHarness(tmp)
             mic = _Mic()
 
-            outMic = os.path.join(tmp, "mic_001.mrc")
+            # Named after the micrograph's id too, so that same-named
+            # micrographs from different folders never share it.
+            outMic = os.path.join(tmp, "%06d__mic_001.mrc" % mic.getObjId())
             self.assertFalse(os.path.lexists(outMic))
 
             CistemProtFindParticles._pickMicrographStep(
