@@ -189,11 +189,15 @@ class ProtUnblurViewer(EmProtocolViewer):
                 return [self.errorMessage('No failed movies found!',
                                           title="Visualization error")]
             else:
-                sqliteFn = self.protocol._getPath('movies_failed.sqlite')
-                self.createFailedMoviesSqlite(sqliteFn)
-                return [self.objectView(sqliteFn, viewParams=viewParamsDef)]
+                # A scratch Set written to disk purely so the object
+                # viewer has something to open; its extension is what
+                # the viewer dispatches on, not a storage choice of
+                # this protocol.
+                failedFn = self.protocol._getPath('movies_failed.sqlite')
+                self.createFailedMoviesSet(failedFn)
+                return [self.objectView(failedFn, viewParams=viewParamsDef)]
 
-    def createFailedMoviesSqlite(self, path):
+    def createFailedMoviesSet(self, path):
         inputMovies = self.protocol.inputMovies.get()
         cleanPath(path)
         movieSet = SetOfMovies(filename=path)

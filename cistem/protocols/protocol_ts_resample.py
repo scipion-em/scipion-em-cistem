@@ -30,6 +30,8 @@
 
 from pyworkflow import BETA
 from pyworkflow.protocol.params import PointerParam, IntParam, Positive
+import os
+
 import pyworkflow.utils as pwutils
 from pwem.protocols import EMProtocol
 from tomo.objects import SetOfTiltSeries
@@ -39,6 +41,12 @@ from cistem import Plugin
 
 OUTPUT_TS_NAME = 'resampledTiltSeries'
 
+
+
+# The steps return one file here as their result file. On Continue, pyworkflow keeps a finished step
+# finished only while its result files exist, so removing the ones of a tilt series that failed makes its
+# step run again.
+STEP_RESULTS_DIR = 'STEP_RESULTS'
 
 class CistemProtTsResample(EMProtocol, ProtTomoBase):
     """
@@ -97,10 +105,12 @@ class CistemProtTsResample(EMProtocol, ProtTomoBase):
 
     # -------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        for ts in self.inputSetOfTiltSeries.get():
+        tsFiles = [ts.getFirstItem().getFileName() for ts in self.inputSetOfTiltSeries.get()]
+        self._prepareFailedForRetry(tsFiles)
 
+        for tsFile in tsFiles:
             self._insertFunctionStep(self.runTsResample,
-                                     ts.getFirstItem().getFileName(),
+                                     tsFile,
                                      needsGPU=False)
 
         self._insertFunctionStep(self.createOutputStep, needsGPU=False)
@@ -125,17 +135,56 @@ NO
 %(newYsize)d
 eof\n
 """
-        self.runJob(prog, args % paramDict)
+        try:
+            self.runJob(prog, args % paramDict)
+        except Exception as e:
+            # Not raised: the step would fail and take the whole run with it. The tilt series is left out
+            # of the output, and Continue resamples it again.
+            self.error("ERROR: Resampling %s has failed: %s" % (tsFile, e))
+            pwutils.cleanPath(paramDict['tsOutName'])
+        return self._stepResultFile(tsFile)
 
     def createOutputStep(self):
         inputTs = self.inputSetOfTiltSeries.get()
         outTsSet = self._createSetOfTiltSeries()
         outTsSet.copyInfo(inputTs)
         outTsSet.setSamplingRate(self._getOutputSampling())
-        outTsSet.copyItems(inputTs, updateTiCallback=self._updateTi)
+        # Only the tilt series that were resampled: a failed one is left out
+        outTsSet.copyItems(inputTs, updateTiCallback=self._updateTi,
+                           itemSelectedCallback=self._isResampled)
+
+        if not len(outTsSet):
+            raise Exception("Resampling failed for every tilt series; see the errors above. "
+                            "Continue resamples them again.")
 
         self._defineOutputs(**{OUTPUT_TS_NAME: outTsSet})
         self._defineTransformRelation(self.inputSetOfTiltSeries, outTsSet)
+        return self._stepResultFile('output')
+
+    def _isResampled(self, ts):
+        return ts.isEnabled() and os.path.exists(self._getOutputFn(ts.getFirstItem().getFileName()))
+
+    # --------------------------- Continue -----------------------------------
+    def _stepResultPath(self, name):
+        key = pwutils.removeBaseExt(name) if os.sep in name else name
+        return self._getExtraPath(STEP_RESULTS_DIR, '%s.TXT' % key)
+
+    def _stepResultFile(self, name):
+        """ The result file of a step: Continue runs the step again once it is removed. """
+        pwutils.makePath(self._getExtraPath(STEP_RESULTS_DIR))
+        path = self._stepResultPath(name)
+        open(path, 'a').close()
+        return path
+
+    def _prepareFailedForRetry(self, tsFiles):
+        """ Have Continue resample again the tilt series without a result. pyworkflow does not run a finished
+        step again, so their steps, and the output one, lose their result files. """
+        retried = [tsFile for tsFile in tsFiles if not os.path.exists(self._getOutputFn(tsFile))
+                   and os.path.exists(self._stepResultPath(tsFile))]
+        for tsFile in retried:
+            pwutils.cleanPath(self._stepResultPath(tsFile))
+        if retried:
+            pwutils.cleanPath(self._stepResultPath('output'))
 
     # --------------------------- INFO functions -----------------------------------
     def _citations(self):
