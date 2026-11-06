@@ -1,3 +1,12 @@
+3.11.0:
+    Users:
+    - Streaming (CTFFind, Unblur, FindParticles) is reliable: Continue/Resume picks up where the run stopped: it reruns the steps an interrupted run left unfinished, without hanging, losing or repeating items
+    - A failed item no longer fails the whole run: it is left out of the outputs and retried on Continue; the run fails only if every item failed
+    - Failed micrographs are retried instead of being published with -999 CTF values
+    - Micrographs with the same name are kept apart
+    - Tilt series: the ones with no usable CTF or a failed resampling are left out and redone on Continue; each CTF series is published whole and only once
+    Developers:
+    - Streaming no longer depends on the database backend (new streaming base, logical sets, watermark discovery)
 3.10:
     Users:
     - add tomo options to measure sample tilt and thickness
