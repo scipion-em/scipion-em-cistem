@@ -34,7 +34,7 @@ from pyworkflow import SPA, TOMO
 from .constants import *
 
 
-__version__ = '3.10.1'
+__version__ = '3.11.0'
 _logo = "cistem_logo.png"
 _references = ['Grant2018']
 
