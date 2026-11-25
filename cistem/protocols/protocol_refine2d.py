@@ -57,7 +57,223 @@ class outputs(Enum):
 
 
 class CistemProtRefine2D(ProtClassify2D):
-    """ Protocol to run 2D classification in cisTEM. """
+    """
+    Performs reference-based or reference-free 2D classification of cryo-EM
+    particle images using cisTEM. The protocol organizes particles into
+    structurally consistent classes in order to improve signal quality,
+    identify conformational variability, remove poor particles, and generate
+    interpretable 2D class averages that can be used in downstream structural
+    analysis.
+
+    AI Generated:
+
+    Refine 2D (CistemProtRefine2D) — User Manual
+        Overview
+
+        The Refine 2D protocol performs iterative 2D classification of single-
+        particle cryo-EM images using the cisTEM refinement framework. Its
+        main purpose is to group similar particle projections into coherent
+        classes and generate high-quality class averages that reveal structural
+        features otherwise obscured by noise. In most cryo-EM workflows, this
+        step represents one of the most important quality-control stages before
+        proceeding to ab initio reconstruction, heterogeneous refinement, or
+        high-resolution 3D analysis.
+
+        From a biological perspective, 2D classification helps determine
+        whether a dataset contains meaningful structural signal, whether
+        particles are properly aligned and centered, and whether the sample
+        exhibits preferred orientations, contamination, aggregation, or
+        conformational heterogeneity. Well-defined class averages often provide
+        the first direct visual confirmation that the dataset is suitable for
+        further processing.
+
+        Inputs and General Workflow
+
+        The protocol requires a set of particle images with associated contrast
+        transfer function information. Optionally, previously generated class
+        averages may be provided as initial references. When no references are
+        supplied, the protocol generates them automatically during the initial
+        stages of refinement.
+
+        The classification process proceeds iteratively. During each cycle,
+        particles are aligned rotationally and translationally against evolving
+        class averages, and the averages are progressively improved using the
+        accumulated signal from particles assigned to each class. Over multiple
+        iterations, noisy or poorly aligned averages gradually evolve into more
+        recognizable structural views.
+
+        The protocol also supports continuation from previous runs. This is
+        especially useful when additional refinement cycles are required or
+        when classification parameters need to be adjusted after inspecting
+        intermediate results. Continuing a refinement often improves class
+        sharpness and stability without restarting the workflow from the
+        beginning.
+
+        Number of Classes and Biological Interpretation
+
+        Choosing the number of classes is one of the most biologically relevant
+        decisions in 2D classification. A small number of classes generally
+        produces broader averages that emphasize dominant structural features,
+        while a larger number allows finer separation of structural states and
+        particle orientations.
+
+        For homogeneous samples, a moderate number of classes is often
+        sufficient to reveal the major projection directions. In heterogeneous
+        samples, increasing the number of classes can help isolate minor
+        conformations, damaged particles, or distinct compositional states.
+        However, excessively large class counts may fragment the dataset and
+        produce noisy or weakly populated classes that are difficult to
+        interpret biologically.
+
+        Resolution Limits and Frequency Filtering
+
+        The protocol allows users to define both low-resolution and high-
+        resolution limits during classification. These parameters strongly
+        influence the balance between stability and structural detail.
+
+        The low-resolution limit suppresses broad background variations and
+        helps prevent classification from being dominated by large-scale noise
+        or uneven image backgrounds. In practice, selecting a value related to
+        the approximate particle size often improves robustness.
+
+        The high-resolution limit controls how much fine structural information
+        contributes during refinement. Early classification cycles usually
+        benefit from conservative high-resolution limits because initial class
+        averages are still poorly defined. As refinement progresses, higher-
+        resolution information can be incorporated gradually to reveal finer
+        secondary-structure features and improve visual interpretability.
+
+        Masking and Particle Centering
+
+        Circular masking is used to focus the refinement on the particle region
+        while reducing the influence of surrounding solvent noise. Choosing an
+        appropriate mask radius is important because masks that are too small
+        may truncate meaningful structural regions, whereas masks that are too
+        large allow unnecessary background noise to affect alignment stability.
+
+        The translational search ranges define how far particles may move
+        during alignment. Well-centered particles generally require only modest
+        search ranges and therefore refine more efficiently. Larger search
+        windows are useful when particle centering is uncertain, although they
+        increase computational cost and may occasionally introduce unstable
+        alignments.
+
+        Angular Sampling and Alignment Accuracy
+
+        During classification, the protocol evaluates multiple in-plane
+        rotational orientations for each particle. The angular search step
+        determines the granularity of this exploration. Larger angular steps
+        provide faster execution and are often sufficient during early
+        exploratory refinement, whereas smaller angular steps may improve final
+        class quality once approximate alignments have stabilized.
+
+        In practical biological workflows, it is common to begin with moderate
+        angular sampling and only increase alignment precision during later
+        refinement cycles. Extremely fine angular searches rarely provide major
+        improvements unless the dataset is already highly homogeneous and of
+        high quality.
+
+        Automatic Particle Usage Strategy
+
+        The protocol can automatically adjust the percentage of particles used
+        during different refinement stages. Early refinement often benefits
+        from using only a subset of particles because this accelerates
+        convergence and prevents unstable averages from dominating the
+        classification process. Later cycles progressively incorporate larger
+        fractions of the dataset until all particles contribute to the final
+        averages.
+
+        This adaptive strategy is particularly valuable for large cryo-EM
+        datasets, where full classification from the beginning may be
+        computationally expensive and biologically less stable. Manual control
+        over particle usage remains available for advanced users who wish to
+        optimize specific datasets or experimental conditions.
+
+        Smoothing and Empty Classes
+
+        The smoothing parameter regulates the statistical sharpness of class
+        assignments. Increasing smoothing can reduce the risk of producing
+        empty or unstable classes during early iterations, particularly in
+        noisy or heterogeneous datasets. In biological terms, smoothing acts as
+        a stabilizing factor that encourages broader particle distributions
+        across classes until reliable structural features emerge.
+
+        Excessive smoothing, however, may blur distinctions between closely
+        related conformations. Users should therefore interpret this parameter
+        as a balance between classification stability and structural
+        specificity.
+
+        Handling Particle Contrast and Image Quality
+
+        The protocol allows inversion of particle contrast to match cisTEM
+        expectations regarding particle appearance. Correct contrast assignment
+        is critical because incorrect polarity can severely degrade alignment
+        quality and produce biologically meaningless averages.
+
+        The protocol can also exclude particles containing blank image borders.
+        Such particles commonly arise when particles are extracted near
+        micrograph edges and may interfere with noise statistics and alignment
+        calculations. Excluding them generally improves classification
+        reliability.
+
+        Parallel Execution and Large Datasets
+
+        For large cryo-EM datasets, the protocol supports parallel refinement
+        execution. Particle subsets may be processed simultaneously and merged
+        afterward into unified classification results. This approach
+        significantly accelerates processing while maintaining biologically
+        consistent class averages.
+
+        Parallel execution is especially important in modern cryo-EM
+        facilities, where datasets routinely contain hundreds of thousands or
+        millions of particles. Efficient distributed classification allows
+        rapid dataset screening and iterative optimization during data
+        processing campaigns.
+
+        Outputs and Their Interpretation
+
+        The protocol produces a set of 2D classes together with representative
+        class averages and alignment information for each particle. These class
+        averages summarize the dominant projection views and structural states
+        present within the dataset.
+
+        Biologically meaningful classes generally display recognizable
+        secondary-structure features, consistent particle boundaries, and
+        stable orientations. Poorly defined or noisy classes often correspond
+        to damaged particles, contaminants, ice artifacts, or inaccurate
+        particle picking.
+
+        The resulting classifications can be used directly for particle
+        cleaning, subset selection, conformational analysis, or preparation of
+        higher-quality datasets for subsequent 3D reconstruction workflows.
+
+        Practical Recommendations
+
+        In routine cryo-EM practice, it is often advisable to begin with a
+        moderate number of classes, conservative high-resolution limits, and
+        automatic particle usage enabled. After inspecting the resulting class
+        averages, parameters can be refined progressively to improve structural
+        detail and isolate heterogeneous populations.
+
+        When class averages remain noisy or unstable, increasing the mask
+        radius slightly, adjusting smoothing, or reducing angular precision may
+        improve convergence. Conversely, when averages already appear stable,
+        decreasing the angular step and increasing the final high-resolution
+        limit may enhance fine structural detail.
+
+        Datasets containing substantial heterogeneity often benefit from
+        larger class counts and multiple sequential classification rounds,
+        where poor particles are removed iteratively between runs.
+
+        Final Perspective
+
+        For most cryo-EM users, 2D classification is not only a computational
+        preprocessing stage but also a biologically informative analysis step.
+        The quality of the resulting class averages strongly influences all
+        downstream structural interpretation. Careful optimization of masking,
+        class number, alignment precision, and refinement strategy is therefore
+        essential for obtaining reliable and biologically meaningful results.
+    """
     _label = 'classify 2D'
     _devStatus = PROD
     _possibleOutputs = outputs
