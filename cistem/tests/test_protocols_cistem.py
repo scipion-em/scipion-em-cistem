@@ -68,11 +68,11 @@ class TestBase(BaseTest):
                                        sphericalAberration=2)
 
     @classmethod
-    def runImportParticlesSqlite(cls, sqliteFn, sampling):
+    def runImportParticlesFromScipionSet(cls, setFile, sampling):
         """ Run an Import particles protocol. """
         protImport = cls.newProtocol(ProtImportParticles,
                                      importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
-                                     sqliteFile=sqliteFn,
+                                     sqliteFile=setFile,
                                      samplingRate=sampling,
                                      haveDataBeenPhaseFlipped=False)
         cls.launchProtocol(protImport)
@@ -147,7 +147,7 @@ class TestRefine2D(TestBase):
         cls.dataset = DataSet.getDataSet('relion_tutorial')
         cls.particlesFn = cls.dataset.getFile('import/case2/particles.sqlite')
         print(magentaStr("\n==> Importing data - particles:"))
-        cls.protImport = cls.runImportParticlesSqlite(cls.particlesFn,
+        cls.protImport = cls.runImportParticlesFromScipionSet(cls.particlesFn,
                                                       sampling=3.5)
 
     def testClassify2D(self):
