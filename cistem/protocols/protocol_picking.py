@@ -549,6 +549,18 @@ class CistemProtFindParticles(CistemStreamingBase, ProtParticlePickingAuto):
             ctf = self.ctfDict.get(mic.getMicName())
         return ctf
 
+    # The generator inserts steps while the executor runs them: a step can
+    # start as soon as it exists, so its micrograph is in micDict before it
+    # (pwem fills micDict only once the whole list has its steps).
+    def _insertPickMicrographStep(self, mic, prerequisites, *args):
+        self.micDict[mic.getMicName()] = mic
+        return ProtParticlePickingAuto._insertPickMicrographStep(self, mic, prerequisites, *args)
+
+    def _insertPickMicrographListStep(self, micList, prerequisites, *args):
+        for mic in micList:
+            self.micDict[mic.getMicName()] = mic
+        return ProtParticlePickingAuto._insertPickMicrographListStep(self, micList, prerequisites, *args)
+
     def pickMicrographStep(self, micName, *args):
         """Pick one micrograph without filesystem completion sidecars."""
         mic = self.micDict[micName]

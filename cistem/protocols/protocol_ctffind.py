@@ -138,6 +138,18 @@ class CistemProtCTFFind(CistemStreamingBase, ProtCTFMicrographs):
         """No filesystem initialization is required for streaming state."""
         return []
 
+    # The generator inserts steps while the executor runs them: a step can
+    # start as soon as it exists, so its micrograph is in micDict before it
+    # (pwem fills micDict only once the whole list has its steps).
+    def _insertCtfStep(self, mic, prerequisites, *args):
+        self.micDict[mic.getMicName()] = mic
+        return ProtCTFMicrographs._insertCtfStep(self, mic, prerequisites, *args)
+
+    def _insertCtfListStep(self, micList, prerequisites, *args):
+        for mic in micList:
+            self.micDict[mic.getMicName()] = mic
+        return ProtCTFMicrographs._insertCtfListStep(self, micList, prerequisites, *args)
+
     def estimateCtfStep(self, micName, *args):
         """Estimate one CTF without filesystem completion markers.
 
